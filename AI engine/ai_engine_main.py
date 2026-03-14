@@ -58,10 +58,10 @@ creier_ai.fit(
 )
 print("Sistemul este antrenat și pregătit să apere Transelectrica!")
 
-creier_ai.save('model_gridsentinel.keras')
+creier_ai.save('AI engine/model_gridsentinel.keras')
 print("Creierul AI a fost salvat cu succes pe disk!")
 
 # 2. Salvăm rigla de măsurat (Normalizatorul)
 # Extensia .pkl (pickle) îngheață rigla matematică exact în starea ei curentă
-joblib.dump(normalizator, 'scaler_gridsentinel.pkl')
+joblib.dump(normalizator, 'AI engine/scaler_gridsentinel.pkl')
 print("Rigla de normalizare a fost salvată!")
