@@ -5,25 +5,36 @@ from tensorflow.keras.models import Model
 from tensorflow.keras.layers import Input, Dense
 
 # Încărcăm fișierul generat de colegul tău
-dataset_complet = pd.read_csv('data/training_data.csv')
+dataset_complet = pd.read_csv('data/training_data.csv', encoding='utf-8-sig')
+print(f"START: Avem {len(dataset_complet)} rânduri în tabelul original.")
+
+# Filtrăm tensiunea
+dataset_complet = dataset_complet[dataset_complet['tensiune_kv'] > 0]
+print(f"PUNCT CONTROL 1: Au rămas {len(dataset_complet)} rânduri după filtrarea tensiunii.")
 
 # 1. Traducem cuvintele în numere (matematică pentru AI)
+# Forțăm textul să fie curat (fără spații ascunse, totul cu majuscule) pentru a evita erorile de tipar
+dataset_complet['status'] = dataset_complet['status'].astype(str).str.strip().str.upper()
 dataset_complet['status'] = dataset_complet['status'].map({'ON': 1, 'OFF': 0})
 
-# Creăm dicționarul pentru starea vremii
-dictionar_vreme = {
-    'Senin': 0, 
-    'Furtuna': 1, 
-    'Viscol': 2, 
-    'Tornada': 3, 
-    'Inundatie': 4
-}
-dataset_complet['weather'] = dataset_complet['weather'].map(dictionar_vreme)
+# Dacă maparea nu a găsit cuvântul exact, va pune NaN. Noi umplem golurile cu 1 (ON) ca să nu pierdem date la hackathon
+dataset_complet['status'] = dataset_complet['status'].fillna(1)
+print(f"PUNCT CONTROL 2: Au rămas {len(dataset_complet)} rânduri după procesarea Status-ului.")
 
-# 2. Filtrăm strict normalitatea
-# Păstrăm pentru antrenament DOAR secundele în care rețeaua a funcționat perfect (Nivel 0)
+# Transformăm starea vremii direct în coduri numerice (0, 1, 2 etc) fără dicționar strict
+dataset_complet['weather'] = dataset_complet['weather'].astype('category').cat.codes
+
+# Ștergem ce e absolut stricat
+dataset_complet = dataset_complet.dropna()
+print(f"PUNCT CONTROL 3: Au rămas {len(dataset_complet)} rânduri după evacuarea erorilor finale (dropna).")
+
+# Afișăm exact ce valori secrete ascunde coloana nivel_severitate
+valori_severitate = dataset_complet['nivel_severitate'].unique()
+print(f"INVESTIGAȚIE: În coloana nivel_severitate avem fix aceste valori: {valori_severitate}")
+
+# 2. Filtrăm strict normalitatea (Aici presupunem că zero este normalitatea, dar dacă investigația de mai sus arată altceva, modifici aici)
 date_normale = dataset_complet[dataset_complet['nivel_severitate'] == 0].copy()
-
+print(f"FINAL: Antrenăm AI-ul pe {len(date_normale)} rânduri perfect normale.")
 # 3. Alegem coloanele pe care le va analiza rețeaua neuronală
 # Observă că avem 6 coloane de intrare acum, deci AI-ul trebuie ajustat
 coloane_fizice = ['status', 'weather', 'frecventa_hz', 'tensiune_kv', 'flux_intrare_mw', 'flux_iesire_mw']
@@ -40,7 +51,6 @@ def build_autoencoder(input_dimensions):
     compresie = Dense(8, activation='relu')(compresie)
     reconstructie = Dense(16, activation='relu')(compresie)
     iesire = Dense(input_dimensions, activation='linear')(reconstructie)
-    
     model = Model(inputs=intrare, outputs=iesire)
     model.compile(optimizer='adam', loss='mse')
     return model
