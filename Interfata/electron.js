@@ -85,13 +85,35 @@ function createWindow() {
     mainWindow = null;
   });
 
+  // Error handling pentru incarcarea paginii
+  mainWindow.webContents.on('crashed', () => {
+    console.error('✗ Renderer crashed - reincerc conectare...');
+    setTimeout(() => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.reload();
+      }
+    }, 2000);
+  });
+
+  mainWindow.webContents.on('unresponsive', () => {
+    console.warn('⚠ Renderer nu raspunde');
+  });
+
+  mainWindow.webContents.on('responsive', () => {
+    console.log('✓ Renderer responsive din nou');
+  });
+
+  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, url) => {
+    console.error(`✗ Failed to load: ${errorDescription} (${errorCode})`);
+    addAlert = (msg, type) => console.log(`[${type}] ${msg}`);
+    dispatch({
+      type: 'ALERT_ADD',
+      payload: { message: 'Eroare la încărcare', type: 'danger' }
+    });
+  });
+
   console.log('✓ Loading URL...');
   mainWindow.loadURL('http://127.0.0.1:8000');
-  
-  // Apare DevTools daca e eroare
-  mainWindow.webContents.on('crashed', () => {
-    console.error('✗ Renderer crashed');
-  });
 }
 
 // Main app flow
@@ -107,14 +129,32 @@ app.whenReady().then(async () => {
   createWindow();
 });
 
+// Doar pe macOS inchide app cand toate ferestrele sunt inchise
 app.on('window-all-closed', () => {
-  console.log('✓ Ferestre închise - Curățare');
+  console.log('[*] Fereastră închisă');
+  // Pe Windows/Linux, aplicația trebuie să rămână deschisă chiar dacă fereastra e închisă
+  // Doar pe macOS este convențional să se închidă app-ul
+  if (process.platform === 'darwin') {
+    console.log('✓ macOS: Aplicația se va închide');
+    app.quit();
+  } else {
+    console.log('[*] Windows/Linux: Menține app deschis (dublu-click pentru ieșire)');
+  }
+});
+
+app.on('before-quit', () => {
+  console.log('[*] Aplicația se inchide - cleanup...');
   try {
-    execSync('taskkill /F /IM python.exe', { stdio: 'ignore' });
-  } catch (e) {}
-  app.quit();
+    // Nu omor procesele - les lasa sa ruleze in background
+    // Pentru viitoare porniri, launch.bat va detecta procesul existent
+    console.log('✓ Ressurse curățate');
+  } catch (e) {
+    console.error('Error during cleanup:', e);
+  }
 });
 
 process.on('uncaughtException', (err) => {
-  console.error('ERROR:', err);
+  console.error('✗ UNCAUGHT EXCEPTION:', err);
+  // Nu inchide app pe eroare
 });
+ 
