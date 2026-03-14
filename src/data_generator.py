@@ -49,44 +49,51 @@ def get_raw_sensors(sev, t):
         "flux_iesire_mw": round(iesire, 2)
     }
 
-# --- 2. GENERARE DATE ANTRENAMENT (Evolutiv & Secvențial) ---
+# --- 2. GENERARE DATE ANTRENAMENT (Evolutiv & Secvențial - FĂRĂ Station ID) ---
 def generate_training_file(total_rows=100000):
     print(f"🏗️ Generăm {total_rows} rânduri evolutive pentru antrenament...")
+    print("🧠 Mod: Station-Agnostic (AI-ul va învăța doar fizica sistemului)")
     data = []
     
     # Generăm datele în "blocuri" de timp pentru fiecare stație
+    # Chiar dacă nu salvăm ID-ul, păstrăm bucla pentru a crea secvențe logice
     rows_per_station = total_rows // len(STATIONS)
     
     for s_id in STATIONS.keys():
         current_sev = 0
         for t in range(rows_per_station):
-            # Logica de evoluție: Severitatea nu sare haotic
-            # Există o șansă mică să crească sau să scadă nivelul
+            # A. Logica de evoluție: Severitatea se schimbă treptat (Persistență)
             rand = random.random()
-            if rand < 0.02: # 2% șansă să se schimbe starea
+            if rand < 0.02: # 2% șansă să se agraveze situația
                 if current_sev < 5: current_sev += 1
-            elif rand < 0.04: # 2% șansă să se repare
+            elif rand < 0.04: # 2% șansă să se repare sistemul
                 if current_sev > 0: current_sev -= 1
             
-            # --- ADAUGĂM ERORI DE SENZOR (Zgomot) ---
-            # Din când în când, forțăm o valoare de "5", dar etichetăm cu severitatea reală
+            # B. Logica de Zgomot / Outliers (Erori de senzor)
+            # Injectăm valori de blackout (5) dar le etichetăm cu starea reală
             if random.random() < 0.005: # 0.5% șansă de senzor defect
-                row = get_raw_sensors(5, t) # Valori de blackout
-                actual_label = current_sev  # Dar AI-ul trebuie să învețe că e tot starea curentă
+                row = get_raw_sensors(5, t) 
+                actual_label = current_sev  
             else:
                 row = get_raw_sensors(current_sev, t)
                 actual_label = current_sev
 
-            row["station_id"] = s_id
+            # C. Construirea rândului pentru CSV
+            # NU mai adăugăm row["station_id"]
             row["timestamp"] = t
             row["nivel_severitate"] = actual_label
             data.append(row)
 
     df = pd.DataFrame(data)
-    # Important: Nu amestecăm rândurile (Shuffle), Tudor are nevoie de ele în ordine!
+    
+    # D. Salvarea - Ordinea este CRITICĂ pentru Tudor (Analiză Temporală)
     df.to_csv("data/training_data.csv", index=False)
-    print("✅ training_data.csv generat cu succes!")
-
+    
+    print("\n✅ training_data.csv generat!")
+    print(f"📊 Coloane salvate: {list(df.columns)}") # Verificăm vizual că a dispărut station_id
+    print("📈 Distribuție severitate:")
+    print(df["nivel_severitate"].value_counts().sort_index())
+    
 # --- 3. GENERARE STREAM LIVE (Evoluție Rapidă pentru Demo) ---
 def generate_telemetry_stream(duration=300):
     print("🌐 Generăm stream live evolutiv...")
