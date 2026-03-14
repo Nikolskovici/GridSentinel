@@ -1,12 +1,5 @@
 """
 GridSentinel — Backend FastAPI
-WebSocket server + motor AI local (fara API-uri externe)
-
-Instalare:
-    pip install fastapi uvicorn websockets
-
-Rulare:
-    uvicorn main:app --reload --port 8000
 """
 
 import asyncio
@@ -24,12 +17,13 @@ from ai_engine import GridAI
 
 TICK_INTERVAL_SEC = 1.0
 
-simulator        = GridSimulator()
-ai_engine        = GridAI()
-connected_clients: set[WebSocket] = set()
-tick_count       = 0
-last_ai_decision = None
-last_ai_tick     = 0
+simulator             = GridSimulator()
+ai_engine             = GridAI()
+connected_clients     = set()
+tick_count            = 0
+last_ai_decision      = None
+last_ai_tick          = 0
+last_ai_node_analysis = {}
 
 
 async def broadcast(message: dict):
@@ -46,37 +40,46 @@ async def broadcast(message: dict):
 
 
 async def grid_loop():
-    global tick_count, last_ai_decision, last_ai_tick
+    global tick_count, last_ai_decision, last_ai_tick, last_ai_node_analysis
+    print("[DEBUG] grid_loop pornit")
     while True:
-        tick_count += 1
-        snapshot  = simulator.generate()
-        snap_dict = asdict(snapshot)
+        try:
+            tick_count += 1
+            snapshot  = simulator.generate()
+            snap_dict = asdict(snapshot)
 
-        should_analyze = (
-            tick_count - last_ai_tick >= 3
-            or snapshot.anomaly_detected
-        )
+            should_analyze = (
+                tick_count - last_ai_tick >= 3
+                or snapshot.anomaly_detected
+            )
 
-        if should_analyze:
-            decision         = ai_engine.analyze(snap_dict)
-            last_ai_decision = asdict(decision)
-            last_ai_tick     = tick_count
+            if should_analyze:
+                decision              = ai_engine.analyze(snap_dict)
+                node_analysis         = ai_engine.analyze_nodes(snap_dict.get("nodes", []))
+                last_ai_decision      = asdict(decision)
+                last_ai_node_analysis = node_analysis
+                last_ai_tick          = tick_count
 
-        message = {
-            "type": "grid_update",
-            "tick": tick_count,
-            "grid": snap_dict,
-            "ai": last_ai_decision or {
-                "status": "normal",
-                "recommendation": "Sistem operational. Monitorizare activa.",
-                "action": None,
-                "action_label": None,
-                "confidence": 1.0,
-            },
-        }
+            message = {
+                "type": "grid_update",
+                "tick": tick_count,
+                "grid": snap_dict,
+                "ai": last_ai_decision or {
+                    "status": "normal",
+                    "recommendation": "Sistem operational. Monitorizare activa.",
+                    "action": None,
+                    "action_label": None,
+                    "confidence": 1.0,
+                },
+                "node_analysis": last_ai_node_analysis,
+            }
 
-        await broadcast(message)
-        await asyncio.sleep(TICK_INTERVAL_SEC)
+            await broadcast(message)
+            await asyncio.sleep(TICK_INTERVAL_SEC)
+
+        except Exception as e:
+            print(f"[ERROR] grid_loop: {e}")
+            await asyncio.sleep(1)
 
 
 @asynccontextmanager
@@ -159,5 +162,4 @@ async def set_scenario(scenario: str):
     simulator.set_scenario(mapping[scenario])
     return {"ok": True, "scenario": scenario}
 
-# Serveste index.html - trebuie sa fie ultimul mount
 app.mount("/", StaticFiles(directory=".", html=True), name="static")

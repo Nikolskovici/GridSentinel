@@ -1,55 +1,40 @@
-"""
-GridSentinel — Generator Date Mock
-Simulează datele SCADA ale rețelei electrice naționale.
-Folosit de FastAPI pentru a alimenta dashboardul via WebSocket.
-"""
-
 import random
 import math
 import time
 from dataclasses import dataclass, asdict
-from typing import Literal
 from enum import Enum
 
 
-# ─────────────────────────────────────────
-# TIPURI DE DATE
-# ─────────────────────────────────────────
-
 class ScenarioType(str, Enum):
     NORMAL = "normal"
-    MACRO  = "macro"   # Criză fizică — deficit MW
-    CYBER  = "cyber"   # Atac FDIA — frecvență manipulată
+    MACRO  = "macro"
+    CYBER  = "cyber"
 
 
 @dataclass
 class NodeStatus:
     id: int
     label: str
-    type: str           # city / nuclear / hydro / thermo
+    type: str
     online: bool
-    load_mw: float      # Consum / producție curentă (MW)
-    anomaly_score: float  # 0.0 = normal, 1.0 = anomalie maximă
+    load_mw: float
+    anomaly_score: float
 
 
 @dataclass
 class GridSnapshot:
     timestamp: float
     scenario: str
-    frequency_hz: float       # Frecvența rețelei (nominal 50 Hz)
-    total_capacity_mw: float  # Capacitate totală disponibilă
-    total_demand_mw: float    # Cerere totală
-    deficit_mw: float         # Deficit (0 = OK)
-    nodes: list               # Lista NodeStatus
+    frequency_hz: float
+    total_capacity_mw: float
+    total_demand_mw: float
+    deficit_mw: float
+    nodes: list
     anomaly_detected: bool
-    anomaly_type: str | None  # None / "physical" / "fdia"
+    anomaly_type: str | None
     anomaly_node_id: int | None
     alert_message: str | None
 
-
-# ─────────────────────────────────────────
-# DEFINIȚIE NODURI
-# ─────────────────────────────────────────
 
 NODES_DEF = [
     {"id": 0,  "label": "BUC", "type": "city",    "base_demand": 1850},
@@ -70,7 +55,7 @@ NODES_DEF = [
     {"id": 15, "label": "GAL", "type": "city",    "base_demand": 220},
     {"id": 16, "label": "SBU", "type": "city",    "base_demand": 170},
     {"id": 17, "label": "TGM", "type": "city",    "base_demand": 200},
-    {"id": 18, "label": "CRN", "type": "nuclear", "base_demand": -1400},  # producer
+    {"id": 18, "label": "CRN", "type": "nuclear", "base_demand": -1400},
     {"id": 19, "label": "PFR", "type": "hydro",   "base_demand": -800},
     {"id": 20, "label": "VID", "type": "hydro",   "base_demand": -300},
     {"id": 21, "label": "BCN", "type": "hydro",   "base_demand": -200},
@@ -87,27 +72,28 @@ NODES_DEF = [
 
 TOTAL_CAPACITY_MW = 14823.0
 TOTAL_DEMAND_MW   = 14560.0
+CITY_NODE_IDS     = [n["id"] for n in NODES_DEF if n["type"] == "city"]
+PRODUCER_NODE_IDS = [n["id"] for n in NODES_DEF if n["type"] in ("nuclear", "hydro", "thermo")]
 
-
-# ─────────────────────────────────────────
-# GENERATOR PRINCIPAL
-# ─────────────────────────────────────────
 
 class GridSimulator:
     def __init__(self):
         self.scenario: ScenarioType = ScenarioType.NORMAL
         self._tick = 0
         self._cyber_phase = 0.0
+        self._cyber_target = None
+        self._macro_target = None
 
     def set_scenario(self, scenario: ScenarioType):
         self.scenario = scenario
         self._tick = 0
         self._cyber_phase = 0.0
+        self._cyber_target = None
+        self._macro_target = None
 
     def generate(self) -> GridSnapshot:
         self._tick += 1
         t = time.time()
-
         if self.scenario == ScenarioType.NORMAL:
             return self._normal(t)
         elif self.scenario == ScenarioType.MACRO:
@@ -115,7 +101,6 @@ class GridSimulator:
         else:
             return self._cyber(t)
 
-    # ── Scenariu normal ──────────────────
     def _normal(self, t: float) -> GridSnapshot:
         freq = 50.0 + random.gauss(0, 0.015)
         nodes = self._base_nodes(all_online=True, noise=0.05)
@@ -133,17 +118,19 @@ class GridSimulator:
             alert_message=None,
         )
 
-    # ── Scenariu criză fizică ────────────
     def _macro(self, t: float) -> GridSnapshot:
-        # Cernavodă (id=18) offline → pierdere 1400 MW
+        if self._macro_target is None:
+            self._macro_target = random.choice(PRODUCER_NODE_IDS)
+
+        offline_id = self._macro_target
+        offline_node = next(n for n in NODES_DEF if n["id"] == offline_id)
+        deficit = abs(offline_node["base_demand"]) + random.gauss(0, 30)
         freq = 49.72 + random.gauss(0, 0.05)
-        deficit = 1400.0 + random.gauss(0, 30)
         capacity = TOTAL_CAPACITY_MW - deficit
 
         nodes = self._base_nodes(all_online=True, noise=0.08)
-        # Cernavodă offline
         for n in nodes:
-            if n.id == 18:
+            if n.id == offline_id:
                 n.online = False
                 n.load_mw = 0.0
                 n.anomaly_score = 1.0
@@ -158,22 +145,24 @@ class GridSimulator:
             nodes=[asdict(n) for n in nodes],
             anomaly_detected=True,
             anomaly_type="physical",
-            anomaly_node_id=18,
-            alert_message=f"Centrala Cernavodă offline. Deficit {deficit:.0f} MW. Frecvență: {freq:.3f} Hz.",
+            anomaly_node_id=offline_id,
+            alert_message=f"Centrala {offline_node['label']} offline. Deficit {deficit:.0f} MW. Frecventa: {freq:.3f} Hz.",
         )
 
-    # ── Scenariu atac cyber FDIA ─────────
     def _cyber(self, t: float) -> GridSnapshot:
-        # Frecvența oscilează ritmic artificial — semnătură FDIA
+        if self._cyber_target is None:
+            self._cyber_target = random.choice(CITY_NODE_IDS)
+
         self._cyber_phase += 0.08
         fdia_signal = math.sin(self._cyber_phase) * 0.20
         freq = 50.0 + fdia_signal + random.gauss(0, 0.01)
 
         nodes = self._base_nodes(all_online=True, noise=0.03)
-        # Constanța (id=3) — senzori compromisi
+        target_label = None
         for n in nodes:
-            if n.id == 3:
+            if n.id == self._cyber_target:
                 n.anomaly_score = min(1.0, abs(fdia_signal) * 4 + 0.5)
+                target_label = n.label
 
         return GridSnapshot(
             timestamp=t,
@@ -185,11 +174,10 @@ class GridSimulator:
             nodes=[asdict(n) for n in nodes],
             anomaly_detected=True,
             anomaly_type="fdia",
-            anomaly_node_id=3,
-            alert_message=f"Oscilație artificială detectată: {freq:.4f} Hz. Pattern FDIA pe stația Constanța.",
+            anomaly_node_id=self._cyber_target,
+            alert_message=f"Oscilatie artificiala detectata: {freq:.4f} Hz. Pattern FDIA pe statia {target_label}.",
         )
 
-    # ── Helper noduri ────────────────────
     def _base_nodes(self, all_online: bool, noise: float) -> list[NodeStatus]:
         nodes = []
         for n in NODES_DEF:
@@ -204,31 +192,3 @@ class GridSimulator:
                 anomaly_score=round(random.uniform(0, 0.05), 3),
             ))
         return nodes
-
-
-# ─────────────────────────────────────────
-# TEST RAPID
-# ─────────────────────────────────────────
-
-if __name__ == "__main__":
-    import json
-
-    sim = GridSimulator()
-
-    print("=== NORMAL ===")
-    snap = sim.generate()
-    print(f"Frecvență: {snap.frequency_hz} Hz | Deficit: {snap.deficit_mw} MW")
-
-    print("\n=== CRIZĂ FIZICĂ ===")
-    sim.set_scenario(ScenarioType.MACRO)
-    snap = sim.generate()
-    print(f"Frecvență: {snap.frequency_hz} Hz | Deficit: {snap.deficit_mw} MW")
-    print(f"Alertă: {snap.alert_message}")
-
-    print("\n=== ATAC CYBER ===")
-    sim.set_scenario(ScenarioType.CYBER)
-    for i in range(5):
-        snap = sim.generate()
-        print(f"Tick {i+1}: {snap.frequency_hz} Hz | Anomalie: {snap.anomaly_score if hasattr(snap, 'anomaly_score') else 'N/A'}")
-
-    print("\nSimulator OK.")

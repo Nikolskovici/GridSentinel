@@ -1,165 +1,177 @@
-"""
-GridSentinel — Motor Decizional AI
-Logică Python pură, fără API-uri externe.
-Analizează datele rețelei și returnează decizii.
-"""
-
+import sys
+import os
+import numpy as np
 from dataclasses import dataclass
+
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'AI engine'))
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'Integrare_AI'))
+
+try:
+    import joblib
+    from tensorflow.keras.models import load_model
+    MODEL = load_model(os.path.join(os.path.dirname(__file__), '..', 'AI engine', 'model_gridsentinel.keras'))
+    SCALER = joblib.load(os.path.join(os.path.dirname(__file__), '..', 'AI engine', 'scaler_gridsentinel.pkl'))
+    ML_AVAILABLE = True
+    print("[AI] Model Keras incarcat cu succes!")
+except Exception as e:
+    ML_AVAILABLE = False
+    print(f"[AI] Model ML indisponibil, folosesc reguli: {e}")
+
+from AI_INTEGRATION import CyberGridOptimizer
 
 
 @dataclass
 class AIDecision:
-    status: str          # "normal" | "alert" | "critical"
-    recommendation: str  # Text afișat operatorului
-    action: str | None   # None | "load_shedding" | "isolate_scada"
+    status: str
+    recommendation: str
+    action: str | None
     action_label: str | None
-    confidence: float    # 0.0 - 1.0
+    confidence: float
 
 
 class GridAI:
-    """
-    Motor decizional bazat pe reguli și praguri.
-    Înlocuiește cu modelul vostru ML când e gata.
-    """
 
-    # ── Praguri frecvență ──
-    FREQ_NOMINAL       = 50.0
-    FREQ_WARN_LOW      = 49.85   # sub acest prag → avertizare
-    FREQ_CRITICAL_LOW  = 49.70   # sub acest prag → criză fizică
-    FREQ_WARN_HIGH     = 50.15
-    FREQ_OSCILLATION_THRESHOLD = 0.10  # amplitudine oscilație FDIA
-
-    # ── Praguri deficit ──
-    DEFICIT_WARN     = 200    # MW
-    DEFICIT_CRITICAL = 800    # MW
+    FREQ_WARN_LOW = 49.85
+    FREQ_WARN_HIGH = 50.15
+    DEFICIT_WARN = 200
+    DEFICIT_CRITICAL = 800
 
     def __init__(self):
         self._freq_history = []
-        self._max_history  = 20
+        self._max_history = 20
+        self._optimizer = CyberGridOptimizer()
+
+    def _predict_anomaly(self, snapshot: dict) -> float:
+        if not ML_AVAILABLE:
+            anomaly = snapshot.get("anomaly_type")
+            if anomaly == "fdia":
+                return 0.85
+            return 0.0
+
+        try:
+            freq = snapshot.get("frequency_hz", 50.0)
+            nodes = snapshot.get("nodes", [])
+
+            loads = [abs(n.get("load_mw", 0)) for n in nodes if n.get("load_mw", 0) != 0]
+            tensiune = 400.0 if not loads else min(400.0, sum(loads) / len(loads) * 0.1)
+
+            flux_in = snapshot.get("total_capacity_mw", 14823.0)
+            flux_out = snapshot.get("total_demand_mw", 14560.0)
+            status = 1
+            weather = 0
+
+            features = np.array([[status, weather, freq, tensiune, flux_in, flux_out]])
+            features_scaled = SCALER.transform(features)
+            reconstructed = MODEL.predict(features_scaled, verbose=0)
+            mse = float(np.mean((features_scaled - reconstructed) ** 2))
+            probabilitate = min(0.99, mse * 1000)
+            return probabilitate
+        except Exception as e:
+            print(f"[AI] Eroare predictie: {e}")
+            return 0.0
 
     def analyze(self, snapshot: dict) -> AIDecision:
-        """
-        Primește un GridSnapshot ca dict și returnează o decizie.
-        Aceasta e funcția pe care o înlocuiți cu modelul vostru.
-        """
-        freq    = snapshot.get("frequency_hz", 50.0)
+        freq = snapshot.get("frequency_hz", 50.0)
         deficit = snapshot.get("deficit_mw", 0.0)
         anomaly = snapshot.get("anomaly_type")
-        nodes   = snapshot.get("nodes", [])
+        nodes = snapshot.get("nodes", [])
 
-        # Actualizează istoricul frecvenței
         self._freq_history.append(freq)
         if len(self._freq_history) > self._max_history:
             self._freq_history.pop(0)
 
-        # ── Detecție FDIA (oscilație ritmică) ──
-        if anomaly == "fdia" or self._detect_oscillation():
+        prob_cyber = self._predict_anomaly(snapshot)
+
+        anomaly_node = snapshot.get("anomaly_node_id")
+        nod_suspect = None
+        if anomaly_node is not None:
+            matching = [n for n in nodes if n.get("id") == anomaly_node]
+            if matching:
+                nod_suspect = matching[0].get("label")
+
+        evaluare = self._optimizer.evalueaza_stare_retea(
+            deficit_mw=deficit,
+            probabilitate_cyber=prob_cyber,
+            nod_suspect=nod_suspect
+        )
+
+        nivel = evaluare["nivel_severitate"]
+        recomandare = evaluare["recomandare_ai"]
+        tip_atac = evaluare["tip_atac"]
+
+        if nivel >= 4 or anomaly == "fdia":
             return AIDecision(
                 status="critical",
-                recommendation=(
-                    f"Oscilație artificială detectată: {freq:.3f} Hz. "
-                    "Pattern FDIA confirmat pe stația Constanța. "
-                    "NU tăiați curentul — izolați SCADA."
-                ),
+                recommendation=f"ATAC CYBER DETECTAT. {tip_atac}. {recomandare}",
                 action="isolate_scada",
-                action_label="IZOLEAZĂ SCADA CONSTANȚA",
-                confidence=self._oscillation_confidence(),
+                action_label="IZOLEAZA SCADA",
+                confidence=prob_cyber,
             )
 
-        # ── Detecție criză fizică ──
-        if anomaly == "physical" or deficit > self.DEFICIT_CRITICAL:
+        if nivel >= 3 or anomaly == "physical" or deficit > self.DEFICIT_CRITICAL:
             offline = [n for n in nodes if not n.get("online", True)]
             offline_labels = ", ".join(n["label"] for n in offline) or "necunoscut"
             return AIDecision(
                 status="alert",
-                recommendation=(
-                    f"Deficit critic {deficit:.0f} MW. "
-                    f"Noduri offline: {offline_labels}. "
-                    "Propun Load Shedding: deconectare consumatori non-critici."
-                ),
+                recommendation=f"Deficit critic {deficit:.0f} MW. Noduri offline: {offline_labels}. {recomandare}",
                 action="load_shedding",
-                action_label="EXECUTĂ LOAD SHEDDING",
-                confidence=min(0.99, deficit / 1500),
+                action_label="EXECUTA LOAD SHEDDING",
+                confidence=deficit / 1500 if deficit / 1500 < 0.99 else 0.99,
             )
 
-        # ── Avertizare frecvență ──
         if freq < self.FREQ_WARN_LOW or freq > self.FREQ_WARN_HIGH:
             return AIDecision(
                 status="alert",
-                recommendation=(
-                    f"Frecvență în afara intervalului normal: {freq:.3f} Hz. "
-                    "Monitorizez evoluția. Fără acțiune imediată necesară."
-                ),
+                recommendation=f"Frecventa in afara intervalului normal: {freq:.3f} Hz. Monitorizez evolutia.",
                 action=None,
                 action_label=None,
                 confidence=0.75,
             )
 
-        # ── Avertizare deficit mic ──
-        if deficit > self.DEFICIT_WARN:
+        if nivel >= 1:
             return AIDecision(
                 status="alert",
-                recommendation=(
-                    f"Deficit minor de {deficit:.0f} MW detectat. "
-                    "Situație sub control. Monitorizez."
-                ),
+                recommendation=recomandare,
                 action=None,
                 action_label=None,
-                confidence=0.80,
+                confidence=0.60,
             )
 
-        # ── Normal ──
         return AIDecision(
             status="normal",
-            recommendation=(
-                f"Rețea stabilă. Frecvență: {freq:.3f} Hz. "
-                "Toți consumatorii critici conectați. Nicio acțiune necesară."
-            ),
+            recommendation=f"Retea stabila. Frecventa: {freq:.3f} Hz. Toti consumatorii critici conectati.",
             action=None,
             action_label=None,
             confidence=0.99,
         )
 
-    def _detect_oscillation(self) -> bool:
-        """Detectează oscilații ritmice în istoricul frecvenței (semn FDIA)."""
-        if len(self._freq_history) < 10:
-            return False
-        recent = self._freq_history[-10:]
-        amplitude = max(recent) - min(recent)
-        # Oscilație mare și ritmică = FDIA
-        alternating = sum(
-            1 for i in range(1, len(recent))
-            if (recent[i] - recent[i-1]) * (recent[i-1] - recent[i-2] if i > 1 else -1) < 0
-        )
-        return amplitude > self.FREQ_OSCILLATION_THRESHOLD and alternating >= 6
+    def analyze_nodes(self, nodes: list) -> dict:
+        results = {}
+        for node in nodes:
+            node_id = node.get("id")
+            label = node.get("label")
+            online = node.get("online", True)
+            anomaly_score = node.get("anomaly_score", 0.0)
+            load_mw = node.get("load_mw", 0.0)
 
-    def _oscillation_confidence(self) -> float:
-        if len(self._freq_history) < 2:
-            return 0.5
-        amplitude = max(self._freq_history[-10:]) - min(self._freq_history[-10:])
-        return min(0.99, amplitude / 0.3)
-
-
-# ─────────────────────────────────────────
-# TEST
-# ─────────────────────────────────────────
-if __name__ == "__main__":
-    from dataclasses import asdict
-    ai = GridAI()
-
-    print("=== NORMAL ===")
-    d = ai.analyze({"frequency_hz": 50.01, "deficit_mw": 0, "anomaly_type": None, "nodes": []})
-    print(f"Status: {d.status} | {d.recommendation}")
-
-    print("\n=== CRIZĂ FIZICĂ ===")
-    d = ai.analyze({"frequency_hz": 49.65, "deficit_mw": 1400, "anomaly_type": "physical", "nodes": [{"label": "CRN", "online": False}]})
-    print(f"Status: {d.status} | Acțiune: {d.action}")
-    print(f"Recomandare: {d.recommendation}")
-
-    print("\n=== ATAC CYBER (simulez oscilații) ===")
-    import math
-    for i in range(15):
-        freq = 50 + math.sin(i * 0.5) * 0.18
-        d = ai.analyze({"frequency_hz": freq, "deficit_mw": 0, "anomaly_type": "fdia", "nodes": []})
-    print(f"Status: {d.status} | Acțiune: {d.action}")
-    print(f"Confidence: {d.confidence:.2f}")
+            if not online:
+                results[node_id] = {
+                    "status": "critical",
+                    "message": f"Nod {label} OFFLINE. Interventie urgenta necesara."
+                }
+            elif anomaly_score > 0.7:
+                results[node_id] = {
+                    "status": "critical",
+                    "message": f"Anomalie critica pe {label}. Score: {anomaly_score:.2f}."
+                }
+            elif anomaly_score > 0.3:
+                results[node_id] = {
+                    "status": "warning",
+                    "message": f"Deviatie detectata pe {label}. Score: {anomaly_score:.2f}."
+                }
+            else:
+                results[node_id] = {
+                    "status": "normal",
+                    "message": f"{label} operational. Load: {abs(load_mw):.0f} MW."
+                }
+        return results

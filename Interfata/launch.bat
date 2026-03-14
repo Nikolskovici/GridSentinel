@@ -18,7 +18,7 @@ if %ERRORLEVEL% EQU 0 (
     echo [+] Serverul ruleaza deja pe port 8000
 ) else (
     echo [*] Pornesc serverul Python in background...
-    start "GridSentinel Server" cmd /K "cd /d "%~dp0" && python -m uvicorn main:app --port 8000"
+    start "GridSentinel Server" cmd /K "cd /d "%~dp0" && py -3.11 -m uvicorn main:app --port 8000"
     timeout /t 3 /nobreak
     echo [+] Serverul pornit
 )
