@@ -1,0 +1,28 @@
+# --- Python Junk ---
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.env
+
+# --- IDE Settings (VS Code) ---
+.vscode/
+.idea/
+*.swp
+
+# --- Sistem (Mac/Windows) ---
+.DS_Store
+Thumbs.db
+
+# --- Date și Modele Mari (Opțional, dar recomandat) ---
+# Dacă vrei să urci doar codul, nu și fișierele imense de date:
+# data/*.csv
+# models/*.keras
+# models/*.pkl
+
+# --- Fișiere temporare ---
+*.log
+*.tmp
