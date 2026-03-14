@@ -160,4 +160,6 @@ async def set_scenario(scenario: str):
     return {"ok": True, "scenario": scenario}
 
 # Serveste index.html - trebuie sa fie ultimul mount
+
 app.mount("/", StaticFiles(directory=".", html=True), name="static")
+
