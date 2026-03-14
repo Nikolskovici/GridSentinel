@@ -1,28 +1,43 @@
-# 🛡️ GridSentinel - Smart Grid Defense System
+# 🛡️ GridSentinel: Scut Digital pentru Infrastructura Critică
 
-Sistem avansat de monitorizare și detecție a anomaliilor pentru rețelele electrice (Transelectrica).
+**GridSentinel** este o soluție avansată de monitorizare și protecție a Rețelei Electrice de Transport (RET), concepută pentru a identifica și clasifica anomaliile de flux în timp real. Sistemul analizează parametrii electrici de la 31 de noduri strategice, oferind o barieră predictivă împotriva fluctuațiilor, erorilor tehnice și atacurilor cibernetice.
 
-## 🚀 Funcționalități
-- **Digital Twin Telemetry:** Generare de date sintetice (frecvență, tensiune, fluxuri MW).
-- **AI Anomaly Detection:** Identificarea automată a atacurilor cibernetice (FDIA) și a defectelor tehnice.
-- **Triage System:** Clasificarea incidentelor pe 6 nivele de severitate.
-        -Nivel 0: Cazul default in care toate sistemele si senzorii functioneaza in parametrii normali.
-        -Nivel 1: Mici deviatii de la normalitate detectate, notificare echipei de ingineri.
-        -Nivel 2: Anomalie descoperita, inginerul principal este notificat si trebuie sa ia o decizie.
-        -Nivel 3: Multiple anomalii detectate, pericol grav de de avarie a retelei. Echipa de ingineri
-                trebuie sa ia o decizie.
-        -Nivel 4: Pericol iminent de avarie si intrerupere a serviciilor de curent electric. Alarma activata
-                si fiecare inginer in functie anuntat.
-        -Nivel 5: Catastrofa. Fiecare inginer este anuntat indiferent daca este in tura si este rugat sa
-                raporteze la centrul sau regional.
-- **Action Plans:** Protocoale automate de intervenție pentru dispeceri.
+---
 
-## 🛠️ Tehnologii
-- Python (Pandas, NumPy, Scikit-Learn, tensorflow)
-- Streamlit (Dashboard interactiv)
+## ⚙️ Logica de Implementare Tehnică
 
-## 👤 Echipa
-- **Niki** (Data Architect & Project Lead)
-- **Tudor** (AI Specialist)
-- **Iustin** (Logic & Integration)
-- **Alex** (UI/UX Developer)
+Proiectul se bazează pe analiza fluxului de putere și a stabilității frecvenței, utilizând următoarele principii de procesare:
+
+* **🔄 Evoluție Temporală și Persistență:** Sistemul nu analizează eșantioane izolate, ci fluxuri continue. Generatorul de date implementează o logică de „tranziție de stare”, ceea ce permite AI-ului să înțeleagă contextul temporal.
+* **🔍 Identificarea Semnăturilor Digitale:** GridSentinel izolează tipul de anomalie prin analiza pattern-ului de date (ex: fluctuații fizice vs. atacuri cibernetice sinusoidale).
+* **🌐 Arhitectură Station-Agnostic:** Algoritmul este antrenat pe legile fizice ale energiei (Hz, kV, MW), permițând scalarea pe orice nod nou fără reantrenare.
+
+---
+
+## 🚦 Matricea de Severitate
+
+| Nivel | Tip Stare | Indicatori Tehnici | Impact Operațional |
+| :--- | :--- | :--- | :--- |
+| 🟢 **0** | **Nominal** | Frecvență stabilă (50Hz), tensiune nominală. | Operare optimă. |
+| 🟡 **1** | **Atenție** | Deviații parametrice ușoare, zgomot de fond. | Monitorizare sporită. |
+| 🟠 **2** | **Alertă** | Căderi de tensiune, eficiență scăzută a fluxului. | Intervenție tehnică. |
+| 🔵 **3** | **Cyber** | Pattern-uri sinusoidale suspecte în frecvență. | Protocol securitate. |
+| 🔴 **4** | **Critic** | Instabilitate severă, risc de colaps structural. | Redirecționare fluxuri. |
+| ⚫ **5** | **Catastrofă** | Încetarea totală a fluxului (Blackout). | Restaurare sistem. |
+
+---
+
+## 🏗️ Arhitectura Proiectului
+
+* **src/** – Nucleul logic: Generator de telemetrie evolutiv și motorul de decizie.
+* **data/** – Depozit pentru setul de antrenament (100k rânduri) și stream-ul live.
+* **models/** – Arhiva modelelor de Machine Learning antrenate pentru detecție.
+
+---
+
+## 👥 Echipa de Dezvoltare
+
+* **Niki:** Data Architect
+* **Tudor:** Machine Learning Engineer
+* **Iustin:** Logic & Decision Engine
+* **Alex:** UI/UX & Visualization Specialist
