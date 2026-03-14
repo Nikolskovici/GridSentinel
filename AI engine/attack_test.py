@@ -7,8 +7,8 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 
 # Încărcăm sistemul
-creier_ai = load_model('model_gridsentinel.keras')
-normalizator = joblib.load('scaler_gridsentinel.pkl')
+creier_ai = load_model('AI engine/model_gridsentinel.keras')
+normalizator = joblib.load('AI engine/scaler_gridsentinel.pkl')
 
 # Citim datele de test
 dataset_test = pd.read_csv('telemetry_stream.csv')
