@@ -13,37 +13,53 @@ echo.
 
 REM Verific daca Python este disponibil
 echo [*] Cauta Python in PATH...
-where python >nul 2>nul
-if %ERRORLEVEL% NEQ 0 (
-    echo [!] Python nu gasit in PATH - cauta varianta standard
-    set "PYTHON_EXE=C:\Users\%USERNAME%\AppData\Local\Programs\Python\Python314\python.exe"
-    if not exist "!PYTHON_EXE!" (
-        echo [!] Python 3.14 nu gasit la !PYTHON_EXE!
-        set "PYTHON_EXE=C:\Python314\python.exe"
-        if not exist "!PYTHON_EXE!" (
-            echo [!] Eroare: Python 3.14 nu gasit
-            pause
-            exit /b 1
+
+REM Incearca sa gaseasca Python direct din locatiile standard
+set "PYTHON_PATHS=C:\Users\%USERNAME%\AppData\Local\Programs\Python\Python314\python.exe;C:\Python314\python.exe;C:\Program Files\Python314\python.exe"
+
+set "PYTHON_EXE="
+for %%p in (%PYTHON_PATHS%) do (
+    if not defined PYTHON_EXE (
+        if exist "%%p" (
+            set "PYTHON_EXE=%%p"
+            echo [✓] Python gasit la: %%p
         )
     )
-) else (
-    for /f %%i in ('where python') do set "PYTHON_EXE=%%i"
 )
 
+REM Daca nu a gasit, incearca 'where' dar ignora shimul Windows Store
+if not defined PYTHON_EXE (
+    for /f %%i in ('where python 2^>nul') do (
+        echo [*] Verificare: %%i
+        if not "%%i"=="C:\Users\%USERNAME%\AppData\Local\Microsoft\WindowsApps\python.exe" (
+            set "PYTHON_EXE=%%i"
+        )
+    )
+)
+
+if not defined PYTHON_EXE (
+    echo [!] Eroare: Python 3.14 nu gasit. Asigura-te ca e instalat!
+    echo [*] Asteptam input...
+    pause
+    exit /b 1
+)
+
+REM Verifica daca executable-ul exista cu adevarat
 if not exist "!PYTHON_EXE!" (
     echo [!] Eroare: Python executable nu exista la !PYTHON_EXE!
     pause
     exit /b 1
 )
+
 echo [✓] Python: !PYTHON_EXE!
 
 echo.
-echo [*] Verific daca serverul e deja pornit..."
+echo [*] Verific daca serverul e deja pornit...
 netstat -ano 2>nul | findstr :8000 >nul 2>nul
 if %ERRORLEVEL% EQU 0 (
     echo [✓] Serverul ruleaza pe port 8000
-    REM Verific cu HTTP GET daca e responsive
-    powershell -NoProfile -Command "try { $r = Invoke-WebRequest -Uri 'http://127.0.0.1:8000/api/status' -TimeoutSec 2 -ErrorAction Stop; if ($r.StatusCode -eq 200) { exit 0 } else { exit 1 } } catch { exit 1 }" >nul 2>nul
+    REM Verific cu HTTP GET daca e responsive - fara security warning
+    powershell -NoProfile -Command "try { $r = Invoke-WebRequest -Uri 'http://127.0.0.1:8000/api/status' -TimeoutSec 2 -UseBasicParsing -ErrorAction Stop; if ($r.StatusCode -eq 200) { exit 0 } else { exit 1 } } catch { exit 1 }" 2>nul
     if %ERRORLEVEL% EQU 0 (
         echo [✓] Server conectat si responsive
         goto :startElectron
@@ -84,7 +100,7 @@ if %ERRORLEVEL% NEQ 0 (
 )
 
 REM Verific daca e responsive
-powershell -NoProfile -Command "try { Invoke-WebRequest -Uri 'http://127.0.0.1:8000/api/status' -TimeoutSec 1 -ErrorAction Stop | Out-Null; exit 0 } catch { exit 1 }" >nul 2>nul
+powershell -NoProfile -Command "try { Invoke-WebRequest -Uri 'http://127.0.0.1:8000/api/status' -TimeoutSec 1 -UseBasicParsing -ErrorAction Stop | Out-Null; exit 0 } catch { exit 1 }" 2>nul
 if %ERRORLEVEL% NEQ 0 (
     goto :waitServer
 )
