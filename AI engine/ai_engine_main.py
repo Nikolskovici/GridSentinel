@@ -65,3 +65,4 @@ print("Creierul AI a fost salvat cu succes pe disk!")
 # Extensia .pkl (pickle) îngheață rigla matematică exact în starea ei curentă
 joblib.dump(normalizator, 'AI engine/scaler_gridsentinel.pkl')
 print("Rigla de normalizare a fost salvată!")
+# Acum avem tot ce ne trebuie pentru a construi un sistem de detecție a anomaliilor în rețeaua Transelectrica!
