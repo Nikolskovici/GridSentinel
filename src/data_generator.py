@@ -1,108 +1,105 @@
 import pandas as pd
 import numpy as np
 import random
-from config import STATIONS
+try:
+    from config import STATIONS
+except ImportError:
+    from src.config import STATIONS
 
-# --- 1. LOGICA DE GENERARE SENZORI (Semnături Unice) ---
+# --- 0. DICȚIONARE DE TRADUCERE ---
+weather_map = {"Senin": 0, "Noros": 1, "Furtuna": 2, "Tornada": 3, "Inundatie": 4}
+status_map = {"ON": 1, "OFF": 0}
+
+# --- 1. LOGICA DE GENERARE SENZORI (Semnături Clare) ---
 def get_raw_sensors(sev, t):
-    """Generează cifre brute cu amprente digitale unice pentru fiecare nivel de severitate"""
-    freq = 50.0
-    volt_kv = 400.0
-    status = "ON"
-    weather = "Senin"
-
+    status, weather = "ON", "Senin"
+    
     if sev == 0:
-        # NIVEL 0: Perfect stabil
-        freq += random.uniform(-0.002, 0.002)
-        volt_kv += random.uniform(-0.5, 0.5)
-
+        freq, volt = random.uniform(49.99, 50.01), random.uniform(399.0, 401.0)
+        weather = "Senin"
     elif sev == 1:
-        # NIVEL 1: Mică instabilitate
-        freq += random.uniform(-0.015, 0.015)
-        volt_kv += random.uniform(-2.0, 2.0)
+        freq, volt = random.uniform(49.94, 49.97), random.uniform(394.0, 397.0)
         weather = "Noros"
-
-    elif sev == 2: 
-        # NIVEL 2: Alertă Tehnică (Salt de frecvență + Cădere de tensiune)
-        freq += random.uniform(0.05, 0.12) * random.choice([-1, 1]) 
-        volt_kv -= random.uniform(10.0, 20.0) 
+    elif sev == 2:
+        freq, volt = random.uniform(49.80, 49.90), random.uniform(375.0, 385.0)
         weather = "Furtuna"
-
-    elif sev == 3: 
-        # NIVEL 3: Atac Cibernetic (Pattern sinusoidal - imposibil de ratat de AI)
-        freq += 0.25 * np.sin(t * 0.3) 
-        volt_kv += 7.0 * np.cos(t * 0.3)
-        weather = "Senin" # Atacurile cibernetice apar des pe vreme bună
-
-    elif sev == 4: 
-        # NIVEL 4: Critic (Instabilitate extremă, aproape de colaps)
-        freq += np.random.uniform(-0.8, 0.8)
-        volt_kv -= random.uniform(70.0, 120.0) 
+    elif sev == 3:
+        freq = 50.0 + 0.15 * np.sin(t * 0.4)
+        volt = 400.0 + 5.0 * np.cos(t * 0.4)
+        weather = "Senin"
+    elif sev == 4:
+        freq, volt = random.uniform(48.5, 49.3), random.uniform(300.0, 340.0)
         weather = "Tornada"
-
-    elif sev == 5: 
-        # NIVEL 5: Catastrofă (Blackout / Stație oprită)
-        status = "OFF"
-        freq, volt_kv = 0.0, 0.0
+    else: # sev == 5
+        status, freq, volt = "OFF", 0.0, 0.0
         weather = "Inundatie"
 
-    # Calcul fluxuri (MW) corelate cu starea sistemului
+    # Calcul fluxuri
     base_flow = 500 if status == "ON" else 0
     intrare = base_flow + np.random.randint(-15, 15) if status == "ON" else 0
-    # Eficiența scade dramatic dacă tensiunea e mică (Nivel 4)
-    efficiency = 0.96 if volt_kv > 380 else 0.75 if volt_kv > 0 else 0
+    efficiency = 0.96 if volt > 380 else 0.75 if volt > 0 else 0
     iesire = (intrare * efficiency) + np.random.randint(-5, 5) if status == "ON" else 0
-    
+
     return {
-        "status": status,
-        "weather": weather,
+        "status": status_map[status],
+        "weather": weather_map[weather],
         "frecventa_hz": round(freq, 4),
-        "tensiune_kv": round(volt_kv, 2),
+        "tensiune_kv": round(volt, 2),
         "flux_intrare_mw": round(intrare, 2),
         "flux_iesire_mw": round(iesire, 2)
     }
 
-# --- 2. GENERARE DATE ANTRENAMENT (100.000 Rânduri) ---
-def generate_training_file(rows=100000):
-    """Creează setul de date echilibrat pentru antrenarea AI-ului"""
+# --- 2. GENERARE DATE ANTRENAMENT (Evolutiv & Secvențial) ---
+def generate_training_file(total_rows=100000):
+    print(f"🏗️ Generăm {total_rows} rânduri evolutive pentru antrenament...")
     data = []
-    # Ponderi echilibrate pentru ca AI-ul să învețe toate clasele la fel de bine
-    # 0:Normal, 1:Atenție, 2:Alertă, 3:Cyber, 4:Critic, 5:Catastrofă
-    weights = [20, 15, 20, 15, 15, 15] 
     
-    print(f"🏗️ Generăm {rows} rânduri pentru antrenament...")
+    # Generăm datele în "blocuri" de timp pentru fiecare stație
+    rows_per_station = total_rows // len(STATIONS)
     
-    for t in range(rows):
-        sev = random.choices([0, 1, 2, 3, 4, 5], weights=weights)[0]
-        row = get_raw_sensors(sev, t)
-        row["nivel_severitate"] = sev
-        data.append(row)
-    
+    for s_id in STATIONS.keys():
+        current_sev = 0
+        for t in range(rows_per_station):
+            # Logica de evoluție: Severitatea nu sare haotic
+            # Există o șansă mică să crească sau să scadă nivelul
+            rand = random.random()
+            if rand < 0.02: # 2% șansă să se schimbe starea
+                if current_sev < 5: current_sev += 1
+            elif rand < 0.04: # 2% șansă să se repare
+                if current_sev > 0: current_sev -= 1
+            
+            # --- ADAUGĂM ERORI DE SENZOR (Zgomot) ---
+            # Din când în când, forțăm o valoare de "5", dar etichetăm cu severitatea reală
+            if random.random() < 0.005: # 0.5% șansă de senzor defect
+                row = get_raw_sensors(5, t) # Valori de blackout
+                actual_label = current_sev  # Dar AI-ul trebuie să învețe că e tot starea curentă
+            else:
+                row = get_raw_sensors(current_sev, t)
+                actual_label = current_sev
+
+            row["station_id"] = s_id
+            row["timestamp"] = t
+            row["nivel_severitate"] = actual_label
+            data.append(row)
+
     df = pd.DataFrame(data)
+    # Important: Nu amestecăm rândurile (Shuffle), Tudor are nevoie de ele în ordine!
     df.to_csv("data/training_data.csv", index=False)
-    
-    print("\n✅ training_data.csv generat!")
-    print("📊 Distribuția claselor:")
-    print(df["nivel_severitate"].value_counts().sort_index())
+    print("✅ training_data.csv generat cu succes!")
 
-# --- 3. GENERARE STREAM LIVE (Pentru Alex & Demo) ---
-def generate_telemetry_stream(duration_seconds=300):
-    """Generează date multi-stație pentru simularea în timp real"""
+# --- 3. GENERARE STREAM LIVE (Evoluție Rapidă pentru Demo) ---
+def generate_telemetry_stream(duration=300):
+    print("🌐 Generăm stream live evolutiv...")
     all_rows = []
-    # Alegem o singură stație victimă pentru a demonstra detecția selectivă
-    target_station = random.choice(list(STATIONS.keys()))
+    target = random.choice(list(STATIONS.keys()))
     
-    print(f"🌐 Generăm stream live pentru {len(STATIONS)} stații...")
-    print(f"🎯 Stația vizată de anomalie: {target_station}")
-
-    for t in range(duration_seconds):
+    for t in range(duration):
         for s_id in STATIONS.keys():
             sev = 0
-            # Aplicăm anomalie progresivă doar stației țintă
-            if s_id == target_station and t > 30:
-                if t < 60: sev = 2
-                elif t < 100: sev = 3
-                else: sev = 4
+            if s_id == target:
+                if 20 < t <= 50: sev = 1
+                elif 50 < t <= 100: sev = 3 # Atac Cyber
+                elif t > 100: sev = 5 # Blackout
             
             row = get_raw_sensors(sev, t)
             row["timestamp"] = t
@@ -110,19 +107,9 @@ def generate_telemetry_stream(duration_seconds=300):
             row["nivel_severitate"] = sev
             all_rows.append(row)
             
-    df = pd.DataFrame(all_rows)
-    df.to_csv("data/telemetry_stream.csv", index=False)
-    print("✅ telemetry_stream.csv actualizat pentru demo!")
-
-# --- 4. FUNCȚIE HELPER PENTRU MAIN.PY ---
-def get_live_data():
-    """Simulează citirea instantanee a unui senzor"""
-    real_sev = random.choices([0, 1, 2, 3, 4, 5], weights=[70, 10, 5, 8, 4, 3])[0]
-    t_fake = random.randint(0, 1000)
-    sensors = get_raw_sensors(real_sev, t_fake)
-    return sensors, real_sev
+    pd.DataFrame(all_rows).to_csv("data/telemetry_stream.csv", index=False)
+    print("✅ telemetry_stream.csv gata!")
 
 if __name__ == "__main__":
-    # Rulăm ambele generări la pornirea scriptului
-    generate_training_file(rows=100000)
-    generate_telemetry_stream(duration_seconds=200)
+    generate_training_file()
+    generate_telemetry_stream()
