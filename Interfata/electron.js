@@ -8,48 +8,9 @@ let mainWindow = null;
 let serverProcess = null;
 
 function startServer() {
-  try {
-    // Cauta Python in locatii comune
-    const pythonCandidates = [
-      'python',
-      'python3',
-      'C:\\Users\\lakv6\\AppData\\Local\\Programs\\Python\\Python314\\python.exe',
-      path.join(process.env.PYTHON_HOME || '', 'python.exe'),
-    ];
-    
-    let pythonExe = null;
-    for (const candidate of pythonCandidates) {
-      try {
-        execSync(`"${candidate}" --version`, { stdio: 'ignore' });
-        pythonExe = candidate;
-        console.log(`[*] Python gasit: ${pythonExe}`);
-        break;
-      } catch (e) {
-        // Continua la urmatorul
-      }
-    }
-    
-    if (!pythonExe) {
-      console.error('✗ Python nu gasit in nicio locatie!');
-      return;
-    }
-    
-    serverProcess = spawn(pythonExe, ['-m', 'uvicorn', 'main:app', '--port', '8000'], {
-      cwd: __dirname,
-      detached: true,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      shell: true
-    });
-    
-    // Log output
-    serverProcess.stdout?.on('data', (data) => console.log(`[uvicorn] ${data}`));
-    serverProcess.stderr?.on('data', (data) => console.error(`[uvicorn] ${data}`));
-    
-    serverProcess.unref();
-    console.log('✓ Server pornit');
-  } catch (e) {
-    console.error('✗ Eroare server:', e.message);
-  }
+  console.log('[*] Electron nu porneste server - verific doar daca ruleaza deja');
+  // Serverul trebuie pornit separat (cu launch.bat sau manual)
+  // Electron doar se conecteaza la el
 }
 
 function checkServer() {
