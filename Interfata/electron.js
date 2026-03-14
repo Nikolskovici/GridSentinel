@@ -9,10 +9,35 @@ let serverProcess = null;
 
 function startServer() {
   try {
-    serverProcess = spawn('python', ['-m', 'uvicorn', 'main:app', '--port', '8000'], {
+    // Cauta Python in locatii comune
+    const pythonCandidates = [
+      'python',
+      'python3',
+      'C:\\Users\\lakv6\\AppData\\Local\\Programs\\Python\\Python314\\python.exe',
+      path.join(process.env.PYTHON_HOME || '', 'python.exe'),
+    ];
+    
+    let pythonExe = null;
+    for (const candidate of pythonCandidates) {
+      try {
+        execSync(`"${candidate}" --version`, { stdio: 'ignore' });
+        pythonExe = candidate;
+        console.log(`[*] Python gasit: ${pythonExe}`);
+        break;
+      } catch (e) {
+        // Continua la urmatorul
+      }
+    }
+    
+    if (!pythonExe) {
+      console.error('✗ Python nu gasit in nicio locatie!');
+      return;
+    }
+    
+    serverProcess = spawn(pythonExe, ['-m', 'uvicorn', 'main:app', '--port', '8000'], {
       cwd: __dirname,
       detached: true,
-      stdio: ['ignore', 'pipe', 'pipe'],  // permite citirea log-urilor
+      stdio: ['ignore', 'pipe', 'pipe'],
       shell: true
     });
     
@@ -106,12 +131,10 @@ app.whenReady().then(async () => {
   startServer();
   const ok = await checkServer();
   
-  if (ok) {
-    createWindow();
-  } else {
-    console.error('✗ Server failed');
-    app.quit();
-  }
+  // Deschide fereastra indiferent daca serverul e ready
+  // WebSocket-ul din browser se va reconecta automat
+  console.log(ok ? '✓ Server conectat' : '⚠ Server nu e ready, deschidere in orice caz...');
+  createWindow();
 });
 
 app.on('window-all-closed', () => {
