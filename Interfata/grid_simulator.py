@@ -77,6 +77,12 @@ NODES_DEF = [
     {"id": 22, "label": "BRZ", "type": "thermo",  "base_demand": -600},
     {"id": 23, "label": "ISN", "type": "thermo",  "base_demand": -500},
     {"id": 24, "label": "TRC", "type": "thermo",  "base_demand": -400},
+    {"id": 25, "label": "ARD", "type": "city",    "base_demand": 210},
+    {"id": 26, "label": "IAS", "type": "city",    "base_demand": 340},
+    {"id": 27, "label": "BMR", "type": "city",    "base_demand": 140},
+    {"id": 28, "label": "ALB", "type": "city",    "base_demand": 150},
+    {"id": 29, "label": "TLC", "type": "city",    "base_demand": 120},
+    {"id": 30, "label": "TGJ", "type": "city",    "base_demand": 170},
 ]
 
 TOTAL_CAPACITY_MW = 14823.0
