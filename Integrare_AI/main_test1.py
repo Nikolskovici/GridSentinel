@@ -27,20 +27,22 @@ def ruleaza_integrarea_finala():
     os.system('cls' if os.name == 'nt' else 'clear')
     print(f"{C.HEADER}{C.BOLD}=== INITIALIZARE SISTEM SMART GRID SENTINEL ==={C.END}")
     
+    # Incarcare AI si Scaler (CĂI ACTUALIZATE PENTRU NOUA STRUCTURĂ)
     try:
         print(f"{C.BLUE}[+] Incarcare model Keras...{C.END}")
-        model_ai = load_model("model_gridsentinel.keras")
+        model_ai = load_model("../AI engine/model_gridsentinel.keras")
         print(f"{C.BLUE}[+] Incarcare Scaler...{C.END}")
-        scaler = joblib.load("scaler_gridsentinel.pkl")
+        scaler = joblib.load("../AI engine/scaler_gridsentinel.pkl")
     except Exception as e:
-        print(f"{C.RED}[-]{C.BOLD} EROARE la incarcarea fisierelor: {e}{C.END}")
+        print(f"{C.RED}[-]{C.BOLD} EROARE la incarcarea fisierelor AI: {e}{C.END}")
         return
 
     optimizer = CyberGridOptimizer()
     orase = ["CLJ", "BRZ", "BUC", "PFR", "VID", "BCN"]
     
+    # Incarcare date CSV (CĂI ACTUALIZATE PENTRU NOUA STRUCTURĂ)
     try:
-        telemetry_data = pd.read_csv("telemetry_stream.csv")
+        telemetry_data = pd.read_csv("../data/telemetry_stream.csv")
         print(f"{C.GREEN}[+] S-au incarcat {len(telemetry_data)} inregistrari de la senzori.{C.END}")
     except Exception as e:
         print(f"{C.RED}[-] Nu gasesc telemetry_stream.csv. Eroare: {e}{C.END}")
@@ -61,7 +63,8 @@ def ruleaza_integrarea_finala():
         rand_senzor_clean = rand_senzor_clean.apply(pd.to_numeric, errors='coerce').fillna(0)
         
         # --- FILTRARE COLOANE ---
-        coloane_inutile = ['timestamp', 'nivel_severitate', 'curent_a', 'is_attack', 'label']
+        # AICI am adaugat 'station_id'
+        coloane_inutile = ['timestamp', 'nivel_severitate', 'curent_a', 'is_attack', 'label', 'station_id']
         date_pentru_ai = rand_senzor_clean.drop(columns=[c for c in coloane_inutile if c in rand_senzor_clean.columns])
 
         try:
@@ -84,7 +87,6 @@ def ruleaza_integrarea_finala():
         
         # 9. AFIȘARE STILIZATĂ
         nivel = raport['nivel_severitate']
-        # ATENȚIE: Aici am reparat indentarea care îți dădea NameError
         culoare_status = C.RED if nivel >= 4 else (C.YELLOW if nivel >= 2 else C.GREEN)
         
         print(f"{C.BOLD}{'='*60}{C.END}")
@@ -109,7 +111,7 @@ def ruleaza_integrarea_finala():
             print(f"{C.GREEN}Sistem stabil. Toți parametrii sunt în limite nominale.{C.END}")
             
         print(f"\n{C.BOLD}{'='*60}{C.END}")
-        time.sleep(1)
+        time.sleep(1.5)  # Am pus pauza de 2 secunde ca sa fie mai usor de citit
 
 if __name__ == "__main__":
     ruleaza_integrarea_finala()
