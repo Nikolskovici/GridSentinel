@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GridSentinel — TRANSELECTRICA DSS</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Exo+2:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Exo 2', sans-serif; background: #0a0e14; color: #c9d1d9; min-height: 100vh; }
+
+    /* ── Header ── */
+    .hdr { background: #0d1117; border-bottom: 1px solid #1e2d3d; padding: 10px 20px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+    .logo { display: flex; align-items: center; gap: 10px; }
+    .logo-icon { width: 24px; height: 24px; background: #f0a500; clip-path: polygon(50% 0%,100% 25%,100% 75%,50% 100%,0% 75%,0% 25%); }
+    .logo-title { font-size: 14px; font-weight: 600; color: #e6edf3; letter-spacing: 2px; text-transform: uppercase; }
+    .logo-sub { font-size: 10px; color: #7d8590; letter-spacing: 1px; }
+    .hdr-right { display: flex; align-items: center; gap: 10px; }
+    .clk { font-family: 'Share Tech Mono', monospace; font-size: 12px; color: #f0a500; }
+    .ws-dot { width: 8px; height: 8px; border-radius: 50%; background: #3d4450; }
+    .ws-dot.connected { background: #3fb950; animation: pulse-dot 2s infinite; }
+    @keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:.4} }
+    .mode { font-size: 10px; padding: 3px 9px; border-radius: 3px; letter-spacing: 1px; text-transform: uppercase; font-weight: 500; }
+    .mode.normal  { background: #0d2a1e; color: #3fb950; border: 1px solid #238636; }
+    .mode.alert   { background: #2d1a00; color: #f0a500; border: 1px solid #f0a500; animation: pb 1s infinite; }
+    .mode.critical{ background: #2d0f0f; color: #f85149; border: 1px solid #f85149; animation: pb .6s infinite; }
+    @keyframes pb { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+    /* ── Layout ── */
+    .body { display: grid; grid-template-columns: 1fr 280px; height: calc(100vh - 50px); overflow: hidden; }
+    .main { padding: 12px; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; }
+    .sidebar { background: #0d1117; border-left: 1px solid #1e2d3d; padding: 12px; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; }
+
+    /* ── Metrics ── */
+    .metrics { display: grid; grid-template-columns: repeat(4,1fr); gap: 8px; }
+    .metric { background: #0d1117; border: 1px solid #1e2d3d; border-radius: 4px; padding: 10px 12px; }
+    .metric-lbl { font-size: 10px; color: #7d8590; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 4px; }
+    .metric-val { font-family: 'Share Tech Mono', monospace; font-size: 18px; font-weight: 600; }
+    .metric-val.g{color:#3fb950} .metric-val.a{color:#f0a500} .metric-val.r{color:#f85149} .metric-val.b{color:#58a6ff}
+    .metric-d { font-size: 10px; color: #7d8590; margin-top: 2px; }
+
+    /* ── Panels ── */
+    .panel { background: #0d1117; border: 1px solid #1e2d3d; border-radius: 4px; padding: 10px; }
+    .panel-title { font-size: 10px; color: #7d8590; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px; }
+    .legend { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 6px; }
+    .leg-item { display: flex; align-items: center; gap: 4px; font-size: 10px; color: #7d8590; }
+    .leg-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+    /* ── Map ── */
+    #mapCanvas { display: block; width: 100%; border-radius: 3px; }
+
+    /* ── Freq chart ── */
+    .freq-wrap { position: relative; height: 100px; }
+
+    /* ── Sidebar ── */
+    .sec-title { font-size: 10px; color: #7d8590; letter-spacing: 1px; text-transform: uppercase; border-bottom: 1px solid #1e2d3d; padding-bottom: 5px; margin-bottom: 8px; }
+    .infra-list { display: flex; flex-direction: column; gap: 4px; }
+    .infra-item { display: flex; align-items: center; gap: 6px; padding: 5px 8px; border-radius: 3px; border: 1px solid #1e2d3d; background: #0a0e14; }
+    .infra-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+    .infra-name { font-size: 11px; color: #c9d1d9; flex: 1; }
+    .infra-st { font-size: 10px; font-family: 'Share Tech Mono', monospace; }
+
+    .alerts { display: flex; flex-direction: column; gap: 5px; }
+    .alert-item { padding: 7px 9px; border-radius: 3px; border-left: 2px solid; font-size: 11px; line-height: 1.5; }
+    .alert-item.warning { background:#1a1500; border-color:#f0a500; color:#d29922; }
+    .alert-item.danger  { background:#1a0000; border-color:#f85149; color:#f85149; }
+    .alert-item.info    { background:#001a2d; border-color:#58a6ff; color:#58a6ff; }
+    .alert-item.success { background:#0d2a1e; border-color:#3fb950; color:#3fb950; }
+    .alert-time { font-family: 'Share Tech Mono', monospace; font-size: 10px; opacity: .7; }
+
+    /* ── AI Panel ── */
+    .ai-panel { background: #0a0e14; border: 1px solid #1e2d3d; border-radius: 4px; padding: 10px; }
+    .ai-title { font-size: 10px; color: #f0a500; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+    .ai-dot { width: 6px; height: 6px; border-radius: 50%; background: #f0a500; animation: pd 1s infinite; }
+    @keyframes pd { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.4;transform:scale(.8)} }
+    .ai-confidence { font-size: 10px; color: #7d8590; margin-left: auto; }
+    .ai-text { font-size: 11px; color: #c9d1d9; line-height: 1.6; margin-bottom: 8px; }
+    .ai-actions { display: flex; flex-direction: column; gap: 6px; }
+    .btn { padding: 7px 12px; border-radius: 3px; font-size: 11px; font-family: 'Exo 2', sans-serif; cursor: pointer; font-weight: 500; border: none; transition: all .2s; }
+    .btn.approve { background: #238636; color: #fff; }
+    .btn.approve:hover { background: #2ea043; }
+    .btn.reject  { background: #1e2d3d; color: #c9d1d9; border: 1px solid #30363d; }
+    .btn.reject:hover { background: #2d333b; }
+
+    /* ── Demo bar ── */
+    .demo-bar { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: #0d1117; border: 1px solid #1e2d3d; border-radius: 4px; font-size: 10px; color: #7d8590; }
+    .demo-bar span { color: #58a6ff; cursor: pointer; text-decoration: underline; }
+    .demo-bar span:hover { color: #79c0ff; }
+
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: #0a0e14; }
+    ::-webkit-scrollbar-thumb { background: #1e2d3d; border-radius: 2px; }
+  </style>
+</head>
+<body>
+
+<div class="hdr">
+  <div class="logo">
+    <div class="logo-icon"></div>
+    <div>
+      <div class="logo-title">GridSentinel</div>
+      <div class="logo-sub">Monitorizare Autonomă — TRANSELECTRICA DSS</div>
+    </div>
+  </div>
+  <div class="hdr-right">
+    <div class="ws-dot" id="ws-dot" title="WebSocket"></div>
+    <div class="clk" id="clk">--:--:--</div>
+    <div class="mode normal" id="mode-badge">OPERAȚIONAL</div>
+  </div>
+</div>
+
+<div class="body">
+  <div class="main">
+
+    <div class="metrics">
+      <div class="metric">
+        <div class="metric-lbl">Frecvență</div>
+        <div class="metric-val g" id="m-freq">50.000 Hz</div>
+        <div class="metric-d">nominal ±0.05 Hz</div>
+      </div>
+      <div class="metric">
+        <div class="metric-lbl">Capacitate</div>
+        <div class="metric-val b" id="m-cap">14,823 MW</div>
+        <div class="metric-d" id="m-cap-d">↑ 98.4% cerere</div>
+      </div>
+      <div class="metric">
+        <div class="metric-lbl">Noduri Active</div>
+        <div class="metric-val g" id="m-nodes">25 / 25</div>
+        <div class="metric-d" id="m-nodes-d">Toate online</div>
+      </div>
+      <div class="metric">
+        <div class="metric-lbl">Nivel Alertă</div>
+        <div class="metric-val g" id="m-alert">VERDE</div>
+        <div class="metric-d" id="m-alert-d">Nicio anomalie</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Hartă Rețea Electrică Națională</div>
+      <div class="legend">
+        <div class="leg-item"><div class="leg-dot" style="background:#c9d1d9;border:1.5px solid #6b7888"></div>Oraș</div>
+        <div class="leg-item"><div class="leg-dot" style="background:#3fb950"></div>Nuclear</div>
+        <div class="leg-item"><div class="leg-dot" style="background:#79c0ff"></div>Hidro</div>
+        <div class="leg-item"><div class="leg-dot" style="background:#f0a500"></div>Termo</div>
+        <div class="leg-item"><div class="leg-dot" style="background:#f85149"></div>Alertă</div>
+      </div>
+      <canvas id="mapCanvas"></canvas>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Frecvență Rețea Live (Hz)</div>
+      <div class="freq-wrap"><canvas id="freqChart"></canvas></div>
+    </div>
+
+    <div class="demo-bar">
+      Demo: injectează scenariu →
+      <span onclick="sendScenario('macro')">Criză Fizică</span>
+      <span onclick="sendScenario('cyber')">Atac Cyber</span>
+      <span onclick="sendScenario('normal')">Reset Normal</span>
+    </div>
+
+  </div>
+
+  <div class="sidebar">
+    <div>
+      <div class="sec-title">Instituții Critice</div>
+      <div class="infra-list" id="infra-list"></div>
+    </div>
+    <div>
+      <div class="sec-title">Jurnal Alerte</div>
+      <div class="alerts" id="alert-log"></div>
+    </div>
+    <div class="ai-panel">
+      <div class="ai-title">
+        <div class="ai-dot"></div>
+        Agent AI — Analiză Live
+        <span class="ai-confidence" id="ai-conf"></span>
+      </div>
+      <div class="ai-text" id="ai-text">Se conectează la server...</div>
+      <div class="ai-actions" id="ai-actions"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─────────────────────────────────────────
+// CONFIGURARE
+// ─────────────────────────────────────────
+const WS_URL = 'ws://127.0.0.1:8000/ws';
+const LON_MIN = 20.26, LON_MAX = 29.69, LAT_MIN = 43.62, LAT_MAX = 48.27;
+
+// ─────────────────────────────────────────
+// STARE
+// ─────────────────────────────────────────
+let ws = null;
+let freqChart = null;
+let geoPath = null;
+let attackNodeId = null;
+let pendingAction = null;
+let freqHistory = Array(50).fill(50.0);
+
+let isolatedEdges = new Set();
+let isolatedNodeId = null;
+
+const NODES_DEF = [
+  {id:0, lon:26.10,lat:44.43,label:'BUC',type:'city',   major:true,  labelDx:0,   labelDy:-15},
+  {id:1, lon:23.59,lat:46.77,label:'CLJ',type:'city',   major:true,  labelDx:0,   labelDy:-15},
+  {id:2, lon:26.25,lat:47.65,label:'SUC',type:'city',   major:false, labelDx:0,   labelDy:-14},
+  {id:3, lon:28.65,lat:44.18,label:'CST',type:'city',   major:true,  labelDx:0,   labelDy:-15},
+  {id:4, lon:21.22,lat:45.75,label:'TMS',type:'city',   major:true,  labelDx:0,   labelDy:-15},
+  {id:5, lon:25.98,lat:44.95,label:'PLO',type:'city',   major:false, labelDx:0,   labelDy:-14},
+  {id:6, lon:23.80,lat:44.32,label:'CRV',type:'city',   major:false, labelDx:0,   labelDy:-14},
+  {id:7, lon:27.96,lat:45.38,label:'BRL',type:'city',   major:false, labelDx:0,   labelDy:-14},
+  {id:8, lon:24.50,lat:47.13,label:'BIS',type:'city',   major:false, labelDx:0,   labelDy:-14},
+  {id:9, lon:21.93,lat:47.05,label:'ORD',type:'city',   major:false, labelDx:0,   labelDy:-14},
+  {id:10,lon:24.87,lat:44.85,label:'PIT',type:'city',   major:false, labelDx:0,   labelDy:-14},
+  {id:11,lon:26.91,lat:46.57,label:'BCU',type:'city',   major:false, labelDx:0,   labelDy:-14},
+  {id:12,lon:24.37,lat:44.43,label:'SLT',type:'city',   major:false, labelDx:0,   labelDy:-14},
+  {id:13,lon:22.65,lat:44.63,label:'DRO',type:'city',   major:false, labelDx:0,   labelDy:-14},
+  {id:14,lon:27.33,lat:44.20,label:'CAL',type:'city',   major:false, labelDx:0,   labelDy:-14},
+  {id:15,lon:28.04,lat:45.43,label:'GAL',type:'city',   major:false, labelDx:0,   labelDy:-14},
+  {id:16,lon:24.15,lat:45.80,label:'SBU',type:'city',   major:false, labelDx:0,   labelDy:-14},
+  {id:17,lon:24.55,lat:46.55,label:'TGM',type:'city',   major:false, labelDx:0,   labelDy:-14},
+  {id:18,lon:28.05,lat:44.33,label:'CRN',type:'nuclear',major:true,  labelDx:0,   labelDy:-17},
+  {id:19,lon:22.52,lat:44.67,label:'PFR',type:'hydro',  major:true,  labelDx:14,  labelDy:-4},
+  {id:20,lon:24.88,lat:45.37,label:'VID',type:'hydro',  major:false, labelDx:0,   labelDy:-16},
+  {id:21,lon:26.10,lat:46.98,label:'BCN',type:'hydro',  major:false, labelDx:14,  labelDy:-4},
+  {id:22,lon:25.97,lat:44.98,label:'BRZ',type:'thermo', major:false, labelDx:0,   labelDy:-16},
+  {id:23,lon:23.70,lat:44.38,label:'ISN',type:'thermo', major:false, labelDx:-14, labelDy:14},
+  {id:24,lon:23.42,lat:44.02,label:'TRC',type:'thermo', major:false, labelDx:0,   labelDy:16},
+  {id:25,lon:21.31,lat:46.17,label:'ARD',type:'city',   major:false, labelDx:0,   labelDy:-14},
+  {id:26,lon:27.60,lat:47.16,label:'IAS',type:'city',   major:true,  labelDx:14,  labelDy:-4},
+  {id:27,lon:22.90,lat:47.07,label:'BMR',type:'city',   major:false, labelDx:0,   labelDy:-14},
+  {id:28,lon:23.58,lat:46.07,label:'ALB',type:'city',   major:false, labelDx:0,   labelDy:16},
+  {id:29,lon:28.80,lat:45.17,label:'TLC',type:'city',   major:false, labelDx:14,  labelDy:10},
+  {id:30,lon:23.27,lat:45.05,label:'TGJ',type:'city',   major:false, labelDx:0,   labelDy:-14},
+];
+
+const EDGES = [[0,5],[0,10],[0,7],[0,14],[0,18],[0,3],[5,22],[5,11],[5,17],[10,20],[10,6],[10,12],[6,23],[6,13],[6,16],[13,19],[13,4],[4,9],[4,25],[9,1],[9,27],[1,8],[1,17],[1,16],[1,28],[17,2],[17,11],[17,26],[17,28],[17,30],[2,21],[2,26],[11,15],[11,7],[11,26],[7,3],[7,15],[3,18],[3,24],[3,29],[18,14],[14,12],[19,20],[20,16],[16,17],[22,24],[19,13],[25,9],[25,27],[28,16],[28,30],[29,15]];
+
+const TYPE_COLOR  = {city:'#c9d1d9', nuclear:'#3fb950', hydro:'#79c0ff', thermo:'#f0a500'};
+const TYPE_BORDER = {city:'#6b7888', nuclear:'#238636', hydro:'#1a6fa0', thermo:'#a06800'};
+const TYPE_RADIUS = {city:5, nuclear:7, hydro:7, thermo:7};
+
+const INFRA = [
+  {name:'Spital Universitar BUC', type:'hospital',   priority:1},
+  {name:'Spital Județean Cluj',   type:'hospital',   priority:1},
+  {name:'Baza Mil. Deveselu',     type:'military',   priority:1},
+  {name:'Baza Mil. Mihail K.',    type:'military',   priority:1},
+  {name:'Centru Date Guvern',     type:'gov',        priority:2},
+  {name:'Dispecerat TRANSELECTRICA', type:'gov',     priority:1},
+  {name:'Stații Pompieri',        type:'emergency',  priority:2},
+  {name:'Mall Băneasa',           type:'commercial', priority:4},
+  {name:'Industrie Grea Ploiești',type:'industrial', priority:4},
+];
+const INFRA_COLORS = {hospital:'#f85149', military:'#f0a500', gov:'#58a6ff', emergency:'#3fb950', commercial:'#3d4450', industrial:'#3d4450'};
+
+// ─────────────────────────────────────────
+// WEBSOCKET
+// ─────────────────────────────────────────
+function connectWS() {
+  ws = new WebSocket(WS_URL);
+
+  ws.onopen = () => {
+    document.getElementById('ws-dot').classList.add('connected');
+    addAlert('Conectat la server GridSentinel.', 'success');
+  };
+
+  ws.onclose = () => {
+    document.getElementById('ws-dot').classList.remove('connected');
+    addAlert('Deconectat. Reconectare în 3s...', 'warning');
+    setTimeout(connectWS, 3000);
+  };
+
+  ws.onerror = () => {
+    addAlert('Eroare WebSocket.', 'danger');
+  };
+
+  ws.onmessage = (event) => {
+    const msg = JSON.parse(event.data);
+    if (msg.type === 'grid_update') handleGridUpdate(msg);
+    else if (msg.type === 'action_executed') { addAlert(msg.message, 'success'); pendingAction = null; renderAIActions(null); }
+    else if (msg.type === 'action_rejected') { addAlert(msg.message, 'info'); pendingAction = null; renderAIActions(null); }
+    else if (msg.type === 'scenario_changed') addAlert('Scenariu schimbat: ' + msg.scenario, 'info');
+  };
+}
+
+function sendScenario(s) {
+  if (ws && ws.readyState === WebSocket.OPEN)
+    ws.send(JSON.stringify({type: 'set_scenario', scenario: s}));
+}
+
+function sendAction(type, action) {
+  if (ws && ws.readyState === WebSocket.OPEN)
+    ws.send(JSON.stringify({type, action}));
+}
+
+// ─────────────────────────────────────────
+// UPDATE DASHBOARD
+// ─────────────────────────────────────────
+function handleGridUpdate(msg) {
+  const g = msg.grid;
+  const ai = msg.ai;
+
+  // Clock
+  document.getElementById('clk').textContent = new Date().toLocaleTimeString('ro-RO');
+
+  // Frecvență
+  freqHistory.push(g.frequency_hz);
+  freqHistory.shift();
+  updateFreqChart(g.frequency_hz, g.scenario);
+
+  // Metrics
+  updateMetrics(g);
+
+  // Map
+  attackNodeId = g.anomaly_node_id;
+  drawMap(attackNodeId);
+
+  // AI panel
+  updateAIPanel(ai, g);
+
+  // Alert dacă există
+  if (g.alert_message && g.anomaly_detected) {
+    const type = g.anomaly_type === 'fdia' ? 'danger' : 'warning';
+    // Nu spam — adaugă doar la schimbare
+  }
+}
+
+function updateMetrics(g) {
+  const badge = document.getElementById('mode-badge');
+  const freq = g.frequency_hz;
+
+  // Frecvență
+  const freqEl = document.getElementById('m-freq');
+  freqEl.textContent = freq.toFixed(3) + ' Hz';
+  freqEl.className = 'metric-val ' + (g.scenario === 'normal' ? 'g' : g.scenario === 'macro' ? 'a' : 'r');
+
+  // Capacitate
+  document.getElementById('m-cap').textContent = g.total_capacity_mw.toLocaleString('ro-RO') + ' MW';
+  const capPct = ((g.total_capacity_mw / g.total_demand_mw) * 100).toFixed(1);
+  document.getElementById('m-cap-d').textContent = (g.deficit_mw > 0 ? '↓ ' : '↑ ') + capPct + '% cerere';
+
+  // Noduri
+  const onlineNodes = g.nodes.filter(n => n.online).length;
+  const nodesEl = document.getElementById('m-nodes');
+  nodesEl.textContent = onlineNodes + ' / ' + g.nodes.length;
+  nodesEl.className = 'metric-val ' + (onlineNodes === g.nodes.length ? 'g' : 'a');
+  document.getElementById('m-nodes-d').textContent = onlineNodes === g.nodes.length ? 'Toate online' : (g.nodes.length - onlineNodes) + ' offline';
+
+  // Alertă
+  const alertEl = document.getElementById('m-alert');
+  if (g.scenario === 'normal') {
+    alertEl.textContent = 'VERDE'; alertEl.className = 'metric-val g';
+    document.getElementById('m-alert-d').textContent = 'Nicio anomalie';
+    badge.className = 'mode normal'; badge.textContent = 'OPERAȚIONAL';
+  } else if (g.scenario === 'macro') {
+    alertEl.textContent = 'PORTOCALIU'; alertEl.className = 'metric-val a';
+    document.getElementById('m-alert-d').textContent = 'Deficit ' + g.deficit_mw.toFixed(0) + ' MW';
+    badge.className = 'mode alert'; badge.textContent = 'CRIZĂ FIZICĂ';
+  } else {
+    alertEl.textContent = 'ROȘU'; alertEl.className = 'metric-val r';
+    document.getElementById('m-alert-d').textContent = 'FDIA — Constanța';
+    badge.className = 'mode critical'; badge.textContent = 'ATAC CYBER';
+  }
+}
+
+function updateAIPanel(ai, g) {
+  if (!ai) return;
+  document.getElementById('ai-text').textContent = ai.recommendation;
+  document.getElementById('ai-conf').textContent = ai.confidence ? (ai.confidence * 100).toFixed(0) + '% conf.' : '';
+
+  // Arată butoane doar dacă AI propune o acțiune și nu e deja pending
+  if (ai.action && !pendingAction) {
+    pendingAction = ai.action;
+    renderAIActions(ai);
+    if (g.alert_message) addAlert(g.alert_message, g.anomaly_type === 'fdia' ? 'danger' : 'warning');
+  }
+}
+
+function renderAIActions(ai) {
+  const d = document.getElementById('ai-actions');
+  d.innerHTML = '';
+  if (!ai || !ai.action) return;
+  const approve = document.createElement('button');
+  approve.className = 'btn approve';
+  approve.textContent = '✓ ' + (ai.action_label || 'EXECUTĂ PLAN');
+  approve.onclick = () => {
+  sendAction('approve_action', ai.action);
+
+  if (attackNodeId !== null) {
+    isolateNode(attackNodeId);
+  }
+
+  renderInfra(true);
+  d.innerHTML = '';
+  pendingAction = null;
+  addAlert('Plan aprobat și executat. Legăturile nodului afectat au fost izolate.', 'success');
+};
+
+  const reject = document.createElement('button');
+  reject.className = 'btn reject';
+  reject.textContent = '✗ RESPINGE';
+  reject.onclick = () => {
+  sendAction('reject_action', ai.action);
+  clearIsolation();
+  d.innerHTML = '';
+  pendingAction = null;
+  addAlert('Plan respins de operator.', 'info');
+};
+
+  d.appendChild(approve);
+  d.appendChild(reject);
+}
+
+// ─────────────────────────────────────────
+// INFRA LIST
+// ─────────────────────────────────────────
+function renderInfra(cuts) {
+  document.getElementById('infra-list').innerHTML = INFRA.map(item => {
+    const powered = !cuts || item.priority <= 2;
+    const color = powered ? INFRA_COLORS[item.type] : '#2d333b';
+    return `<div class="infra-item">
+      <div class="infra-dot" style="background:${color}"></div>
+      <div class="infra-name">${item.name}</div>
+      <div class="infra-st" style="color:${color}">${powered ? 'ACTIV' : 'TĂIAT'}</div>
+    </div>`;
+  }).join('');
+}
+
+// ─────────────────────────────────────────
+// ALERTE
+// ─────────────────────────────────────────
+function addAlert(msg, type) {
+  const log = document.getElementById('alert-log');
+  const el = document.createElement('div');
+  el.className = 'alert-item ' + type;
+  el.innerHTML = `<div class="alert-time">${new Date().toLocaleTimeString('ro-RO')}</div>${msg}`;
+  log.insertBefore(el, log.firstChild);
+  while (log.children.length > 8) log.removeChild(log.lastChild);
+}
+
+// ─────────────────────────────────────────
+// FREQ CHART
+// ─────────────────────────────────────────
+function initFreqChart() {
+  const ctx = document.getElementById('freqChart');
+  freqChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: freqHistory.map(() => ''),
+      datasets: [{
+        data: [...freqHistory],
+        borderColor: '#3fb950',
+        borderWidth: 1.2,
+        fill: true,
+        backgroundColor: '#3fb95010',
+        pointRadius: 0,
+        tension: 0.4,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { display: false },
+        y: {
+          min: 49.4, max: 50.6,
+          grid: { color: '#13202e' },
+          ticks: { color: '#4a5568', font: { size: 9, family: 'Share Tech Mono' }, callback: v => v.toFixed(1) + ' Hz' }
+        }
+      }
+    }
+  });
+}
+
+function updateFreqChart(freq, scenario) {
+  const colors = { normal: ['#3fb950', '#3fb95010'], macro: ['#f0a500', '#f0a50010'], cyber: ['#f85149', '#f8514910'] };
+  const [border, bg] = colors[scenario] || colors.normal;
+  freqChart.data.datasets[0].borderColor = border;
+  freqChart.data.datasets[0].backgroundColor = bg;
+  freqChart.data.datasets[0].data = [...freqHistory];
+  freqChart.update('none');
+}
+
+// ─────────────────────────────────────────
+// MAPA
+// ─────────────────────────────────────────
+function project(lon, lat, W, H) {
+  return {
+    x: (lon - LON_MIN) / (LON_MAX - LON_MIN) * W,
+    y: H - (lat - LAT_MIN) / (LAT_MAX - LAT_MIN) * H
+  };
+}
+
+function drawGeo(ctx, coords, W, H) {
+  coords.forEach(ring => {
+    ctx.beginPath();
+    ring.forEach((pt, i) => {
+      const p = project(pt[0], pt[1], W, H);
+      i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y);
+    });
+    ctx.closePath();
+    ctx.fillStyle = '#0f1c2e';
+    ctx.fill();
+    ctx.strokeStyle = '#2a4a6f';
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+  });
+}
+
+function drawEdgeX(ctx, x, y) {
+  const s = 7;
+
+  ctx.beginPath();
+  ctx.moveTo(x - s, y - s);
+  ctx.lineTo(x + s, y + s);
+  ctx.moveTo(x + s, y - s);
+  ctx.lineTo(x - s, y + s);
+
+  ctx.strokeStyle = '#f85149';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+}
+
+function isolateNode(nodeId) {
+  isolatedEdges.clear();
+  isolatedNodeId = nodeId;
+
+  EDGES.forEach(([a, b], index) => {
+    if (a === nodeId || b === nodeId) {
+      isolatedEdges.add(index);
+    }
+  });
+
+  drawMap(nodeId);
+}
+
+function clearIsolation() {
+  isolatedEdges.clear();
+  isolatedNodeId = null;
+  drawMap(null);
+}
+
+function drawMap(attackId) {
+  const canvas = document.getElementById('mapCanvas');
+  const W = canvas.offsetWidth || 600;
+  const H = Math.round(W * 0.52);
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#0d1117';
+  ctx.fillRect(0, 0, W, H);
+
+  if (geoPath) {
+    if (geoPath.type === 'Polygon') drawGeo(ctx, geoPath.coordinates, W, H);
+    else if (geoPath.type === 'MultiPolygon') geoPath.coordinates.forEach(p => drawGeo(ctx, p, W, H));
+  }
+
+  const nodes = NODES_DEF.map(n => ({ ...n, ...project(n.lon, n.lat, W, H) }));
+
+  EDGES.forEach(([a, b], index) => {
+  const na = nodes[a], nb = nodes[b];
+  const isAtt = attackId !== null && (a === attackId || b === attackId);
+  const isIsolated = isolatedEdges.has(index);
+
+  ctx.beginPath();
+  ctx.moveTo(na.x, na.y);
+  ctx.lineTo(nb.x, nb.y);
+
+  if (isIsolated) {
+    ctx.setLineDash([6, 4]);
+    ctx.strokeStyle = '#f85149';
+    ctx.lineWidth = 2.5;
+  } else {
+    ctx.setLineDash([]);
+    ctx.strokeStyle = isAtt ? 'rgba(248,81,73,0.4)' : '#1e3a55';
+    ctx.lineWidth = isAtt ? 1.5 : 1;
+  }
+
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  if (isIsolated) {
+    const mx = (na.x + nb.x) / 2;
+    const my = (na.y + nb.y) / 2;
+    drawEdgeX(ctx, mx, my);
+  }
+});
+
+  nodes.forEach(n => {
+    const isAtt = attackId === n.id;
+    const color = isAtt ? '#f85149' : TYPE_COLOR[n.type];
+    const border = isAtt ? '#f85149' : TYPE_BORDER[n.type];
+    const r = isAtt ? 9 : (n.major ? TYPE_RADIUS[n.type] + 2 : TYPE_RADIUS[n.type]);
+
+    ctx.beginPath(); ctx.arc(n.x, n.y, r + 4, 0, Math.PI * 2);
+    ctx.fillStyle = isAtt ? 'rgba(248,81,73,0.15)' : (n.type === 'city' ? 'rgba(200,209,217,0.05)' : color + '22');
+    ctx.fill();
+
+    ctx.beginPath(); ctx.arc(n.x, n.y, r + 1, 0, Math.PI * 2);
+    ctx.strokeStyle = border; ctx.lineWidth = 1.5; ctx.stroke();
+
+    ctx.beginPath(); ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
+    ctx.fillStyle = color; ctx.fill();
+
+    if (isAtt) {
+      ctx.beginPath(); ctx.arc(n.x, n.y, r + 8, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(248,81,73,0.3)'; ctx.lineWidth = 1; ctx.stroke();
+    }
+
+    ctx.font = (n.major ? 'bold 10px' : '9px') + " 'Share Tech Mono', monospace";
+const lw = ctx.measureText(n.label).width;
+const labelDx = n.labelDx || 0;
+const labelDy = (n.labelDy !== undefined) ? n.labelDy : (-r - 5);
+
+ctx.fillStyle = 'rgba(13,17,23,0.75)';
+ctx.fillRect(n.x + labelDx - lw / 2 - 2, n.y + labelDy - 10, lw + 4, 12);
+ctx.fillStyle = isAtt ? '#f85149' : (n.type === 'city' ? '#9aa5b4' : color);
+ctx.textAlign = 'center';
+ctx.fillText(n.label, n.x + labelDx, n.y + labelDy);
+  });
+}
+
+// Încarcă GeoJSON România
+fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-50m.json')
+  .then(r => r.json())
+  .then(topo => {
+    const arcs = topo.arcs;
+    const arcToCoords = i => {
+      const rev = i < 0; const arc = arcs[rev ? ~i : i];
+      let x = 0, y = 0, pts = [];
+      arc.forEach(d => { x += d[0]; y += d[1]; pts.push([x, y]); });
+      if (rev) pts.reverse(); return pts;
+    };
+    const scale = pt => [pt[0] * topo.transform.scale[0] + topo.transform.translate[0], pt[1] * topo.transform.scale[1] + topo.transform.translate[1]];
+    const ringToGeo = ring => ring.map(arcToCoords).flat().map(scale);
+    const ro = topo.objects.countries.geometries.find(g => g.id === '642');
+    if (!ro) return;
+    geoPath = ro.type === 'Polygon'
+      ? { type: 'Polygon', coordinates: ro.arcs.map(ringToGeo) }
+      : { type: 'MultiPolygon', coordinates: ro.arcs.map(p => p.map(ringToGeo)) };
+    drawMap(null);
+  })
+  .catch(() => drawMap(null));
+
+// ─────────────────────────────────────────
+// INIT
+// ─────────────────────────────────────────
+initFreqChart();
+renderInfra(false);
+drawMap(null);
+connectWS();
+setInterval(() => {
+  document.getElementById('clk').textContent = new Date().toLocaleTimeString('ro-RO');
+}, 1000);
+</script>
+</body>
+</html>
