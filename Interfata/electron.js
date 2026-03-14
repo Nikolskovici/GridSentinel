@@ -50,14 +50,14 @@ function checkServer() {
 }
 
 function createWindow() {
-  console.log('✓ Creare fereastră');
+  console.log('\n[>>] Creare fereastră Electron...');
   
   mainWindow = new BrowserWindow({
     x: 0,
     y: 0,
     width: 1400,
     height: 900,
-    show: true,
+    show: false,
     skipTaskbar: false,
     icon: path.join(__dirname, 'icon.png'),
     webPreferences: {
@@ -66,95 +66,128 @@ function createWindow() {
     }
   });
 
-  // Asigura ca fereastra e vizibila
-  mainWindow.show();
-  mainWindow.focus();
-  mainWindow.setVisibleOnAllWorkspaces(true);
-  mainWindow.setAlwaysOnTop(true);
-  setTimeout(() => mainWindow?.setAlwaysOnTop(false), 1000);
+  console.log('[✓] BrowserWindow creat');
 
   mainWindow.once('ready-to-show', () => {
-    console.log('✓ Fereastră visible');
-    if (mainWindow) {
+    console.log('[✓] ready-to-show event');
+    if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.show();
       mainWindow.focus();
+      mainWindow.setVisibleOnAllWorkspaces(true);
+      mainWindow.setAlwaysOnTop(true);
+      setTimeout(() => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.setAlwaysOnTop(false);
+        }
+      }, 1000);
     }
   });
 
   mainWindow.on('closed', () => {
+    console.log('[*] Fereastră închisă de utilizator');
     mainWindow = null;
   });
 
-  // Error handling pentru incarcarea paginii
   mainWindow.webContents.on('crashed', () => {
-    console.error('✗ Renderer crashed - reincerc conectare...');
+    console.error('[✗] Renderer crashed!');
     setTimeout(() => {
       if (mainWindow && !mainWindow.isDestroyed()) {
+        console.log('[*] Reîncarcă...');
         mainWindow.reload();
       }
     }, 2000);
   });
 
   mainWindow.webContents.on('unresponsive', () => {
-    console.warn('⚠ Renderer nu raspunde');
+    console.warn('[⚠] Renderer unresponsive');
   });
 
   mainWindow.webContents.on('responsive', () => {
-    console.log('✓ Renderer responsive din nou');
+    console.log('[✓] Renderer responsive');
   });
 
   mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, url) => {
-    console.error(`✗ Failed to load: ${errorDescription} (${errorCode})`);
-    addAlert = (msg, type) => console.log(`[${type}] ${msg}`);
-    dispatch({
-      type: 'ALERT_ADD',
-      payload: { message: 'Eroare la încărcare', type: 'danger' }
-    });
+    console.error(`[✗] Failed to load ${url}: ${errorDescription} (${errorCode})`);
+    setTimeout(() => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        console.log('[*] Retry încărcare...');
+        mainWindow.reload();
+      }
+    }, 3000);
   });
 
-  console.log('✓ Loading URL...');
-  mainWindow.loadURL('http://127.0.0.1:8000');
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    if (input.alt && input.key.toLowerCase() === 'f4') {
+      console.log('[*] Alt+F4 - quit');
+      app.quit();
+    }
+    if (input.alt && input.key.toLowerCase() === 'd') {
+      console.log('[*] Alt+D - DevTools');
+      mainWindow.webContents.toggleDevTools();
+    }
+  });
+
+  console.log('[*] LoadURL: http://127.0.0.1:8000');
+  mainWindow.loadURL('http://127.0.0.1:8000').catch((err) => {
+    console.error(`[✗] loadURL error: ${err.message}`);
+  });
 }
 
 // Main app flow
+app.on('ready', () => {
+  console.log('\n╔════════════════════════════════════════╗');
+  console.log('║  GridSentinel Electron Startup       ║');
+  console.log('╚════════════════════════════════════════╝\n');
+  console.log(`[*] Platform: ${process.platform}`);
+  console.log(`[*] Electron: ${process.versions.electron}`);
+  console.log(`[*] Node: ${process.versions.node}`);
+  console.log(`[*] CWD: ${process.cwd()}\n`);
+});
+
 app.whenReady().then(async () => {
-  console.log('=== GridSentinel Starting ===');
+  console.log('[*] app.whenReady() triggered');
   
   startServer();
+  console.log('[*] Verific server...');
   const ok = await checkServer();
   
-  // Deschide fereastra indiferent daca serverul e ready
-  // WebSocket-ul din browser se va reconecta automat
-  console.log(ok ? '✓ Server conectat' : '⚠ Server nu e ready, deschidere in orice caz...');
-  createWindow();
+  console.log(ok ? '[✓] Server OK' : '[⚠] Server timeout, continuu oricum...');
+  console.log('[*] Creare window...');
+  
+  try {
+    createWindow();
+    console.log('[✓] Window created');
+  } catch (err) {
+    console.error(`[✗] createWindow error: ${err.message}`);
+    console.error(err.stack);
+  }
 });
 
 // Doar pe macOS inchide app cand toate ferestrele sunt inchise
 app.on('window-all-closed', () => {
-  console.log('[*] Fereastră închisă');
-  // Pe Windows/Linux, aplicația trebuie să rămână deschisă chiar dacă fereastra e închisă
-  // Doar pe macOS este convențional să se închidă app-ul
+  console.log('[*] window-all-closed event');
   if (process.platform === 'darwin') {
-    console.log('✓ macOS: Aplicația se va închide');
+    console.log('[✓] macOS: quit');
     app.quit();
   } else {
-    console.log('[*] Windows/Linux: Menține app deschis (dublu-click pentru ieșire)');
+    console.log('[*] Windows: app stays open (Alt+F4 to quit)');
   }
 });
 
 app.on('before-quit', () => {
-  console.log('[*] Aplicația se inchide - cleanup...');
-  try {
-    // Nu omor procesele - les lasa sa ruleze in background
-    // Pentru viitoare porniri, launch.bat va detecta procesul existent
-    console.log('✓ Ressurse curățate');
-  } catch (e) {
-    console.error('Error during cleanup:', e);
-  }
+  console.log('[*] before-quit');
+});
+
+app.on('quit', () => {
+  console.log('[*] quit event');
 });
 
 process.on('uncaughtException', (err) => {
-  console.error('✗ UNCAUGHT EXCEPTION:', err);
-  // Nu inchide app pe eroare
+  console.error('[✗] UNCAUGHT:', err.message);
+  console.error(err.stack);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('[✗] REJECTION:', reason);
 });
  

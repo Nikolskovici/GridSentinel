@@ -12,6 +12,7 @@ Rulare:
 import asyncio
 import json
 import time
+import sys
 from contextlib import asynccontextmanager
 from dataclasses import asdict
 
@@ -22,7 +23,15 @@ from fastapi.staticfiles import StaticFiles
 from grid_simulator import GridSimulator, ScenarioType
 from ai_engine import GridAI
 
+def log(msg):
+    """Log cu timestamp"""
+    print(f"[{time.strftime('%H:%M:%S')}] {msg}", flush=True)
+
 TICK_INTERVAL_SEC = 1.0
+
+log("╔════════════════════════════════════════╗")
+log("║  GridSentinel FastAPI Server Startup  ║")
+log("╚════════════════════════════════════════╝")
 
 simulator        = GridSimulator()
 ai_engine        = GridAI()
@@ -30,6 +39,9 @@ connected_clients: set[WebSocket] = set()
 tick_count       = 0
 last_ai_decision = None
 last_ai_tick     = 0
+
+log(f"[✓] Simulator initialized")
+log(f"[✓] AI Engine initialized")
 
 
 async def broadcast(message: dict):
@@ -40,9 +52,11 @@ async def broadcast(message: dict):
     for ws in connected_clients:
         try:
             await ws.send_text(data)
-        except Exception:
+        except Exception as e:
+            log(f"[!] Error sending to client: {e}")
             dead.add(ws)
-    connected_clients.difference_update(dead)
+    if dead:
+        connected_clients.difference_update(dead)
 
 
 async def grid_loop():
@@ -81,12 +95,16 @@ async def grid_loop():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    log("[*] Starting grid_loop...")
     task = asyncio.create_task(grid_loop())
     yield
+    log("[*] Stopping grid_loop...")
     task.cancel()
 
 
 app = FastAPI(title="GridSentinel", lifespan=lifespan)
+
+log("[✓] FastAPI app created")
 
 app.add_middleware(
     CORSMiddleware,
@@ -95,23 +113,36 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+log("[✓] CORS middleware added")
+
+
+@app.get("/api/status")
+async def status():
+    """Health check endpoint"""
+    return {
+        "running": True,
+        "tick": tick_count,
+        "scenario": simulator.scenario.value,
+    }
+
 
 @app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):
+    log(f"[*] WebSocket connection attempt from {ws.client}")
     await ws.accept()
     connected_clients.add(ws)
-    print(f"[+] Client conectat. Total: {len(connected_clients)}")
+    log(f"[✓] Client connected. Total: {len(connected_clients)}")
     try:
         while True:
-            raw     = await ws.receive_text()
+            raw = await ws.receive_text()
             command = json.loads(raw)
             await handle_command(command, ws)
     except WebSocketDisconnect:
         connected_clients.discard(ws)
-        print(f"[-] Client deconectat. Total: {len(connected_clients)}")
+        log(f"[-] Client disconnected. Total: {len(connected_clients)}")
     except Exception as e:
         connected_clients.discard(ws)
-        print(f"[!] Eroare: {e}")
+        log(f"[!] WebSocket error: {e}")
 
 
 async def handle_command(command: dict, ws: WebSocket):
