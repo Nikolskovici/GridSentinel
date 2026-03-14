@@ -5,7 +5,7 @@ from tensorflow.keras.models import Model
 from tensorflow.keras.layers import Input, Dense
 
 # Încărcăm fișierul generat de colegul tău
-dataset_complet = pd.read_csv('training_data.csv')
+dataset_complet = pd.read_csv('data/training_data.csv')
 
 # 1. Traducem cuvintele în numere (matematică pentru AI)
 dataset_complet['status'] = dataset_complet['status'].map({'ON': 1, 'OFF': 0})
@@ -53,7 +53,7 @@ creier_ai.fit(
     x=date_scalate, 
     y=date_scalate, 
     epochs=50, 
-    batch_size=32, 
+    batch_size=256, 
     verbose=1
 )
 print("Sistemul este antrenat și pregătit să apere Transelectrica!")
