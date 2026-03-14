@@ -37,7 +37,7 @@ Proiectul se bazează pe analiza fluxului de putere și a stabilității frecven
 
 ## 👥 Echipa de Dezvoltare
 
-* **Niki:** Project Manager & Data Architect
+* **Niki:** Data Architect
 * **Tudor:** Machine Learning Engineer
 * **Iustin:** Logic & Decision Engine
 * **Alex:** UI/UX & Visualization Specialist
