@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="ro">
 <head>
+
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>GridSentinel — TRANSELECTRICA DSS</title>
@@ -202,6 +203,9 @@ let attackNodeId = null;
 let pendingAction = null;
 let freqHistory = Array(50).fill(50.0);
 
+let isolatedEdges = new Set();
+let isolatedNodeId = null;
+
 const NODES_DEF = [
   {id:0, lon:26.10,lat:44.43,label:'BUC',type:'city',   major:true,  labelDx:0,   labelDy:-15},
   {id:1, lon:23.59,lat:46.77,label:'CLJ',type:'city',   major:true,  labelDx:0,   labelDy:-15},
@@ -385,12 +389,29 @@ function renderAIActions(ai) {
   const approve = document.createElement('button');
   approve.className = 'btn approve';
   approve.textContent = '✓ ' + (ai.action_label || 'EXECUTĂ PLAN');
-  approve.onclick = () => { sendAction('approve_action', ai.action); renderInfra(true); d.innerHTML = ''; pendingAction = null; addAlert('Plan aprobat și executat.', 'success'); };
+  approve.onclick = () => {
+  sendAction('approve_action', ai.action);
+
+  if (attackNodeId !== null) {
+    isolateNode(attackNodeId);
+  }
+
+  renderInfra(true);
+  d.innerHTML = '';
+  pendingAction = null;
+  addAlert('Plan aprobat și executat. Legăturile nodului afectat au fost izolate.', 'success');
+};
 
   const reject = document.createElement('button');
   reject.className = 'btn reject';
   reject.textContent = '✗ RESPINGE';
-  reject.onclick = () => { sendAction('reject_action', ai.action); d.innerHTML = ''; pendingAction = null; addAlert('Plan respins de operator.', 'info'); };
+  reject.onclick = () => {
+  sendAction('reject_action', ai.action);
+  clearIsolation();
+  d.innerHTML = '';
+  pendingAction = null;
+  addAlert('Plan respins de operator.', 'info');
+};
 
   d.appendChild(approve);
   d.appendChild(reject);
@@ -494,6 +515,39 @@ function drawGeo(ctx, coords, W, H) {
   });
 }
 
+function drawEdgeX(ctx, x, y) {
+  const s = 7;
+
+  ctx.beginPath();
+  ctx.moveTo(x - s, y - s);
+  ctx.lineTo(x + s, y + s);
+  ctx.moveTo(x + s, y - s);
+  ctx.lineTo(x - s, y + s);
+
+  ctx.strokeStyle = '#f85149';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+}
+
+function isolateNode(nodeId) {
+  isolatedEdges.clear();
+  isolatedNodeId = nodeId;
+
+  EDGES.forEach(([a, b], index) => {
+    if (a === nodeId || b === nodeId) {
+      isolatedEdges.add(index);
+    }
+  });
+
+  drawMap(nodeId);
+}
+
+function clearIsolation() {
+  isolatedEdges.clear();
+  isolatedNodeId = null;
+  drawMap(null);
+}
+
 function drawMap(attackId) {
   const canvas = document.getElementById('mapCanvas');
   const W = canvas.offsetWidth || 600;
@@ -510,14 +564,34 @@ function drawMap(attackId) {
 
   const nodes = NODES_DEF.map(n => ({ ...n, ...project(n.lon, n.lat, W, H) }));
 
-  EDGES.forEach(([a, b]) => {
-    const na = nodes[a], nb = nodes[b];
-    const isAtt = attackId !== null && (a === attackId || b === attackId);
-    ctx.beginPath(); ctx.moveTo(na.x, na.y); ctx.lineTo(nb.x, nb.y);
+  EDGES.forEach(([a, b], index) => {
+  const na = nodes[a], nb = nodes[b];
+  const isAtt = attackId !== null && (a === attackId || b === attackId);
+  const isIsolated = isolatedEdges.has(index);
+
+  ctx.beginPath();
+  ctx.moveTo(na.x, na.y);
+  ctx.lineTo(nb.x, nb.y);
+
+  if (isIsolated) {
+    ctx.setLineDash([6, 4]);
+    ctx.strokeStyle = '#f85149';
+    ctx.lineWidth = 2.5;
+  } else {
+    ctx.setLineDash([]);
     ctx.strokeStyle = isAtt ? 'rgba(248,81,73,0.4)' : '#1e3a55';
     ctx.lineWidth = isAtt ? 1.5 : 1;
-    ctx.stroke();
-  });
+  }
+
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  if (isIsolated) {
+    const mx = (na.x + nb.x) / 2;
+    const my = (na.y + nb.y) / 2;
+    drawEdgeX(ctx, mx, my);
+  }
+});
 
   nodes.forEach(n => {
     const isAtt = attackId === n.id;
