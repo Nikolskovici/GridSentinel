@@ -16,27 +16,36 @@ function startServer() {
 function checkServer() {
   return new Promise((resolve) => {
     let attempts = 0;
+    const maxAttempts = 120; // ~60 secunde (500ms * 120)
     const check = () => {
       attempts++;
-      const req = http.get('http://127.0.0.1:8000/api/status', { timeout: 1500 }, (res) => {
+      console.log(`[*] Incerc conectare la server... (${attempts}/${maxAttempts})`);
+      
+      const req = http.get('http://127.0.0.1:8000/api/status', { timeout: 2000 }, (res) => {
         if (res.statusCode === 200) {
-          console.log('✓ Server conectat');
+          console.log('✓ Server conectat si responsive');
           res.resume();
           resolve(true);
-        } else if (attempts < 60) {
-          setTimeout(check, 500);
         } else {
-          resolve(false);
+          res.resume();
+          if (attempts < maxAttempts) {
+            setTimeout(check, 500);
+          } else {
+            console.warn('⚠ Server nu raspunde dupa 60s, continuu oricum');
+            resolve(false);
+          }
         }
-      }).on('error', () => {
-        if (attempts < 60) {
+      }).on('error', (err) => {
+        if (attempts < maxAttempts) {
           setTimeout(check, 500);
         } else {
+          console.warn('⚠ Server nu disponibil dupa 60s, continuu oricum');
           resolve(false);
         }
       });
     };
-    setTimeout(check, 1000);
+    // Incepe verificarea dupa 2 secunde (timp de startup uvicorn)
+    setTimeout(check, 2000);
   });
 }
 

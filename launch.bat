@@ -31,16 +31,40 @@ REM Verific daca serverul ruleaza deja
 echo [*] Verific daca serverul e deja pornit...
 netstat -ano | findstr :8000 >nul
 if %ERRORLEVEL% EQU 0 (
-    echo [+] Serverul ruleaza deja pe port 8000
-) else (
-    echo [*] Pornesc serverul Python...
-    start "GridSentinel Server" cmd /K "cd /d "%~dp0Interfata" && %PYTHON_EXE% -m uvicorn main:app --port 8000"
-    timeout /t 3 /nobreak
-    echo [+] Serverul pornit in background
+    echo [+] Serverul ruleaza pe port 8000
+    REM Verific cu HTTP GET daca e responsive
+    powershell -NoProfile -Command "try { $r = Invoke-WebRequest -Uri 'http://127.0.0.1:8000/api/status' -TimeoutSec 2 -ErrorAction Stop; if ($r.StatusCode -eq 200) { exit 0 } else { exit 1 } } catch { exit 1 }" >nul 2>nul
+    if %ERRORLEVEL% NEQ 0 (
+        echo [!] Server pe port 8000 nu raspunde - curatez procesul
+        taskkill /F /IM python.exe >nul 2>nul
+        timeout /t 1 /nobreak
+    ) else (
+        echo [+] Server conectat si responsive
+        goto :startElectron
+    )
 )
+
+echo [*] Pornesc serverul Python...
+start "GridSentinel Server" cmd /K "cd /d "%~dp0Interfata" && %PYTHON_EXE% -m uvicorn main:app --reload --port 8000"
+echo [*] Astept serverul sa se porneasca (max 10 secunde)...
+for /L %%i in (1,1,20) do (
+    timeout /t 0.5 /nobreak >nul 2>nul
+    netstat -ano | findstr :8000 >nul
+    if %ERRORLEVEL% EQU 0 (
+        powershell -NoProfile -Command "try { Invoke-WebRequest -Uri 'http://127.0.0.1:8000/api/status' -TimeoutSec 1 -ErrorAction Stop | Out-Null; exit 0 } catch { exit 1 }" >nul 2>nul
+        if %ERRORLEVEL% EQU 0 (
+            echo [+] Server conectat cu succes
+            goto :startElectron
+        )
+    )
+)
+echo [!] Avertisment: Serverul nu a raspuns in timp - incerc oricum sa pornesc Electron
+
+:startElectron
 
 echo.
 echo [*] Pornesc aplicatia Electron...
+cd /d "%~dp0Interfata"
 call npx electron .
 
 echo.
