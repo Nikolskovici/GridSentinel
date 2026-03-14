@@ -162,4 +162,6 @@ async def set_scenario(scenario: str):
     simulator.set_scenario(mapping[scenario])
     return {"ok": True, "scenario": scenario}
 
+# Serveste index.html - trebuie sa fie ultimul mount
 app.mount("/", StaticFiles(directory=".", html=True), name="static")
+
