@@ -20,3 +20,27 @@ SEVERITY_LEVELS = {
 
 # 3. Tipurile de vreme
 WEATHER_TYPES = ["Senin", "Furtuna", "Viscol", "Tornada", "Inundatie"]
+# 4. Definirea coloanelor pentru consistență (Contractul de Date)
+FEATURES = [
+    "frecventa_hz", 
+    "tensiune_kv", 
+    "curent_a", 
+    "flux_intrare_mw", 
+    "flux_iesire_mw"
+]
+TARGET = "nivel_severitate"
+# 5. Culori pentru Dashboard (Alex)
+SEVERITY_COLORS = {
+    0: "#28a745", # Verde (Succes)
+    1: "#94d3a2", # Verde deschis
+    2: "#ffc107", # Galben (Atenție)
+    3: "#fd7e14", # Portocaliu (Risc)
+    4: "#dc3545", # Roșu (Critic)
+    5: "#000000"  # Negru (Catastrofă)
+}
+# 6. Limite Tehnice
+LIMITS = {
+    "frecventa_min": 49.0,
+    "frecventa_max": 51.0,
+    "tensiune_min": 350.0 # kV
+}
