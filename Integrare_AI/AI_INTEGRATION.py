@@ -1,49 +1,80 @@
-import numpy as np
-from sklearn.ensemble import IsolationForest
-
-class CyberDefenseAI:
+class CyberGridOptimizer:
     def __init__(self):
-        self.model = IsolationForest(contamination=0.05, random_state=42)
-        # Antrenăm cu date normale (50Hz)
-        date_training = np.random.normal(50.0, 0.01, (1000, 1))
-        self.model.fit(date_training)
-
-    def analizeaza_flux_date(self, date_noi):
-        pred = self.model.predict(date_noi)
-        if -1 in pred:
-            return "🚨 ALERTĂ: Anomalie detectată (Posibil atac de injectare date)!"
-        return None
-
-class GridOptimizer:
-    def calculeaza_prioritate_reala(self, n):
-        importanta = {'spital': 100, 'militar': 90, 'transport': 70, 'rezidential': 50, 'industrial': 30, 'comercial': 10}
-        scor = importanta.get(n.get('tip', 'rezidential'), 40)
-        if n.get('smart'): scor += 10
-        if n.get('mw', 0) > 80: scor -= 5
-        return scor
-
-    def genereaza_plan_dinamic(self, lista_noduri, deficit):
-        if deficit <= 0: return None
-        for n in lista_noduri:
-            n['prio'] = self.calculeaza_prioritate_reala(n)
+        # Topologia rețelei pentru izolare (Grafuri)
+        self.topologie_retea = {
+            "CLJ": ["ORD", "BIS", "TGM", "PFR"],
+            "BRZ": ["BUC", "VID", "BCU", "PIT"],
+            "BUC": ["BRZ", "CAL", "SLT", "CST"],
+            "PFR": ["TMS", "CLJ", "ISN", "TRC"],
+            "VID": ["BRZ", "SBU", "PIT"],
+            "BCN": ["SUC", "BCU", "TGM"]
+        }
         
-        sortati = sorted(lista_noduri, key=lambda x: x['prio'])
-        plan = []
-        economisit = 0
+        # Tipuri de anomalii cibernetice detectate de modelul ML
+        self.tipuri_atac = {
+            "DOS": "Denial of Service (Saturație trafic SCADA)",
+            "MITM": "Man-in-the-Middle (Interceptare date senzori)",
+            "INJ": "Injection Attack (Comenzi false în sistem)",
+            "MAL": "Malware (Compromitere nod control)"
+        }
+
+    def analizeaza_anomalie_cyber(self, probabilitate):
+        """Determină tipul de atac în funcție de amprenta probabilității."""
+        if probabilitate > 0.90: return self.tipuri_atac["DOS"]
+        if probabilitate > 0.75: return self.tipuri_atac["INJ"]
+        if probabilitate > 0.50: return self.tipuri_atac["MITM"]
+        if probabilitate > 0.30: return self.tipuri_atac["MAL"]
+        return "Activitate suspectă nespecificată"
+
+    def evalueaza_stare_retea(self, deficit_mw, probabilitate_cyber, nod_suspect=None):
+        nivel = 0
+        status = "Parametri Nominali"
+        solutie = "Monitorizare continuă."
+        muchii_de_taiat = []
+        detalii_cyber = ""
+
+        # Dacă există risc cyber, identificăm tipul de anomalie
+        if probabilitate_cyber > 0.30:
+            detalii_cyber = self.analizeaza_anomalie_cyber(probabilitate_cyber)
+
+        # Logica de decizie combinată (Energie + Securitate)
+        if deficit_mw > 400 or (probabilitate_cyber > 0.85 and deficit_mw > 250):
+            nivel = 5
+            status = f"COLAPS IMINENT / {detalii_cyber.upper()}"
+            solutie = "CRITIC: Izolare fizică totală. Treceți nodul în regim de insulă."
+            if nod_suspect: muchii_de_taiat = self._calculeaza_izolare(nod_suspect)
+
+        elif deficit_mw > 250 or probabilitate_cyber > 0.70:
+            nivel = 4
+            status = f"ATAC DETECTAT: {detalii_cyber}"
+            solutie = "URGENȚĂ: Izolare logică. Redirecționare trafic prin noduri sigure."
+            if nod_suspect: muchii_de_taiat = self._calculeaza_izolare(nod_suspect)
+
+        elif deficit_mw > 150 or probabilitate_cyber > 0.50:
+            nivel = 3
+            status = "INSTABILITATE / RISC CYBER MODERAT"
+            solutie = "AVERTIZARE: Monitorizare intensivă SCADA. Resetare chei criptografice."
         
-        for n in sortati:
-            if economisit >= deficit: break
-            smart = n.get('smart', False)
-            metoda = "LIMITARE (THROTTLE)" if smart else "DECONECTARE (SHUTDOWN)"
-            reducere = n['mw'] * 0.5 if smart else n['mw']
-            
-            plan.append({
-                "locatie": n['nume'],
-                "tip": n['tip'].upper(),
-                "actiune": metoda,
-                "detalii": f"Actionare releu {n['nume']} pentru {metoda}",
-                "mw_salvati": reducere,
-                "motivatie": f"Prioritate {n['prio']} (Triaj automat pe importanta {n['tip']})"
-            })
-            economisit += reducere
-        return plan
+        elif probabilitate_cyber > 0.30:
+            nivel = 2
+            status = f"ANOMALIE: {detalii_cyber}"
+            solutie = "ALERTĂ: Analiză forensic pe pachetele suspecte. Activare Firewall Layer 7."
+
+        elif deficit_mw > 50:
+            nivel = 1
+            status = "DEFICIT ENERGETIC MINOR"
+            solutie = "ROUTINĂ: Pornire rezervă terțiară."
+
+        return {
+            "nivel_severitate": nivel,
+            "status_general": status,
+            "nod_afectat": nod_suspect if nivel >= 2 else None,
+            "recomandare_ai": solutie,
+            "muchii_de_taiat": muchii_de_taiat,
+            "deficit_curent": deficit_mw,
+            "tip_atac": detalii_cyber
+        }
+        
+    def _calculeaza_izolare(self, nod):
+        vecini = self.topologie_retea.get(nod, [])
+        return [f"{nod}-{vecin}" for vecin in vecini]
