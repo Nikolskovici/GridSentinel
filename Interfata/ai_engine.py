@@ -310,6 +310,17 @@ class GridAI:
 
         return None
 
+    def _snapshot_anomaly_node(self, snapshot: dict) -> str | None:
+        node_id = snapshot.get("anomaly_node_id")
+        nodes = snapshot.get("nodes", [])
+        if node_id is None or not isinstance(node_id, int):
+            return None
+        if 0 <= node_id < len(nodes):
+            label = nodes[node_id].get("label")
+            if label:
+                return str(label).strip().upper()
+        return None
+
     def _build_cut_edges(self, target_node: str | None, action: str | None) -> list[str]:
         if not target_node or action != "isolate_scada":
             return []
@@ -329,7 +340,10 @@ class GridAI:
         deficit = max(deficit_snapshot, deficit_csv)
 
         csv_node = self._normalize_station_id(csv_station_id, nodes)
-        nod_suspect = csv_node or self._choose_suspect_node(nodes, prob_cyber)
+        snapshot_node = self._snapshot_anomaly_node(snapshot)
+        heuristic_node = self._choose_suspect_node(nodes, prob_cyber)
+        # Prioritize live simulator/integration signal over CSV historical label.
+        nod_suspect = snapshot_node or heuristic_node or csv_node
 
         evaluare = self._optimizer.evalueaza_stare_retea(
             deficit_mw=deficit,
