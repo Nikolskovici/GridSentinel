@@ -349,7 +349,7 @@ function handleGridUpdate(msg) {
   freqHistory.shift();
   updateFreqChart(g.frequency_hz, g.scenario);
 
-  updateMetrics(g);
+  updateMetrics(g, ai);
 
   if (msg.node_analysis) {
     nodeAnalysis = msg.node_analysis;
@@ -389,13 +389,15 @@ function handleGridUpdate(msg) {
   updateAIPanel(ai, g);
 }
 
-function updateMetrics(g) {
+function updateMetrics(g, ai) {
   const badge = document.getElementById('mode-badge');
   const freq = g.frequency_hz;
+  const severity = Number(ai?.severity_level ?? 0);
+  const recommendation = (ai?.recommendation || '').trim();
 
   const freqEl = document.getElementById('m-freq');
   freqEl.textContent = freq.toFixed(3) + ' Hz';
-  freqEl.className = 'metric-val ' + (g.scenario === 'normal' ? 'g' : g.scenario === 'macro' ? 'a' : 'r');
+  freqEl.className = 'metric-val ' + (severity >= 4 ? 'r' : severity >= 2 ? 'a' : 'g');
 
   document.getElementById('m-cap').textContent = g.total_capacity_mw.toLocaleString('ro-RO') + ' MW';
   const capPct = ((g.total_capacity_mw / g.total_demand_mw) * 100).toFixed(1);
@@ -409,22 +411,28 @@ function updateMetrics(g) {
 
   const alertEl = document.getElementById('m-alert');
 
-  if (g.scenario === 'normal') {
-    alertEl.textContent = 'VERDE';
+  if (severity <= 0) {
+    alertEl.textContent = 'NIVEL 0';
     alertEl.className = 'metric-val g';
-    document.getElementById('m-alert-d').textContent = 'Nicio anomalie';
+    document.getElementById('m-alert-d').textContent = recommendation || 'Nicio anomalie';
     badge.className = 'mode normal';
     badge.textContent = 'OPERATIONAL';
-  } else if (g.scenario === 'macro') {
-    alertEl.textContent = 'PORTOCALIU';
+  } else if (severity <= 2) {
+    alertEl.textContent = 'NIVEL ' + severity;
     alertEl.className = 'metric-val a';
-    document.getElementById('m-alert-d').textContent = 'Deficit ' + g.deficit_mw.toFixed(0) + ' MW';
+    document.getElementById('m-alert-d').textContent = recommendation || ('Deficit ' + g.deficit_mw.toFixed(0) + ' MW');
+    badge.className = 'mode alert';
+    badge.textContent = 'ALERTA NIVEL ' + severity;
+  } else if (severity === 3) {
+    alertEl.textContent = 'NIVEL 3';
+    alertEl.className = 'metric-val a';
+    document.getElementById('m-alert-d').textContent = recommendation || ('Deficit ' + g.deficit_mw.toFixed(0) + ' MW');
     badge.className = 'mode alert';
     badge.textContent = 'CRIZA FIZICA';
   } else {
-    alertEl.textContent = 'ROSU';
+    alertEl.textContent = 'NIVEL ' + severity;
     alertEl.className = 'metric-val r';
-    document.getElementById('m-alert-d').textContent = 'FDIA detectat';
+    document.getElementById('m-alert-d').textContent = recommendation || 'FDIA detectat';
     badge.className = 'mode critical';
     badge.textContent = 'ATAC CYBER';
   }

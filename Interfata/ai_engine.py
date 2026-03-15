@@ -49,7 +49,10 @@ try:
         'On': 1, 'Off': 0,
         'on': 1, 'off': 0
     })
-    TELEMETRY_DATA = TELEMETRY_DATA.apply(pd.to_numeric, errors='coerce').fillna(0)
+    if "station_id" in TELEMETRY_DATA.columns:
+        TELEMETRY_DATA["station_id"] = TELEMETRY_DATA["station_id"].astype(str).str.strip().str.upper()
+    numeric_cols = [c for c in TELEMETRY_DATA.columns if c != "station_id"]
+    TELEMETRY_DATA[numeric_cols] = TELEMETRY_DATA[numeric_cols].apply(pd.to_numeric, errors='coerce').fillna(0)
     CSV_AVAILABLE = True
     print(f"[AI] CSV incarcat: {len(TELEMETRY_DATA)} inregistrari din {csv_path.name}.")
 except Exception as e:
@@ -114,37 +117,65 @@ class GridAI:
         self._max_history = 20
         self._optimizer = CyberGridOptimizer()
         self._csv_index = 0
-        self._attack_index = 0
-        self._normal_index = 0
 
         if CSV_AVAILABLE and TELEMETRY_DATA is not None and len(TELEMETRY_DATA) > 0:
-            if "nivel_severitate" in TELEMETRY_DATA.columns:
-                self._attack_rows = TELEMETRY_DATA[TELEMETRY_DATA["nivel_severitate"] >= 3].reset_index(drop=True)
-                self._normal_rows = TELEMETRY_DATA[TELEMETRY_DATA["nivel_severitate"] == 0].reset_index(drop=True)
+            self._rows = TELEMETRY_DATA.copy().reset_index(drop=True)
+            if "nivel_severitate" in self._rows.columns:
+                self._rows_non_zero = self._rows[self._rows["nivel_severitate"] > 0].reset_index(drop=True)
+                self._rows_zero = self._rows[self._rows["nivel_severitate"] == 0].reset_index(drop=True)
+                self._rows_by_severity = {
+                    int(level): grp.reset_index(drop=True)
+                    for level, grp in self._rows_non_zero.groupby("nivel_severitate")
+                    if int(level) > 0 and len(grp) > 0
+                }
+                self._severity_cycle = sorted(self._rows_by_severity.keys())
             else:
-                self._attack_rows = TELEMETRY_DATA.copy().reset_index(drop=True)
-                self._normal_rows = TELEMETRY_DATA.copy().reset_index(drop=True)
+                self._rows_non_zero = None
+                self._rows_zero = None
+                self._rows_by_severity = {}
+                self._severity_cycle = []
+            self._non_zero_index = 0
+            self._zero_index = 0
+            self._severity_index = 0
+            self._rows_by_severity_index = {k: 0 for k in self._rows_by_severity}
         else:
-            self._attack_rows = None
-            self._normal_rows = None
+            self._rows = None
+            self._rows_non_zero = None
+            self._rows_zero = None
+            self._rows_by_severity = {}
+            self._severity_cycle = []
+            self._non_zero_index = 0
+            self._zero_index = 0
+            self._severity_index = 0
+            self._rows_by_severity_index = {}
 
     def _get_csv_row(self) -> dict:
-        if not CSV_AVAILABLE or TELEMETRY_DATA is None or len(TELEMETRY_DATA) == 0:
+        if not CSV_AVAILABLE or self._rows is None or len(self._rows) == 0:
             return {}
 
-        # alternam intre perioade normale si perioade cu atac,
-        # ca UI-ul sa arate schimbari vizibile live
-        use_attack = (self._csv_index % 8 in [4, 5, 6])
+        # In demo intercalam periodic evenimente non-zero, altfel fluxul pare blocat pe nivel 0.
+        use_non_zero = (
+            self._rows_non_zero is not None and
+            len(self._rows_non_zero) > 0 and
+            self._csv_index % 4 == 3
+        )
 
-        if use_attack and self._attack_rows is not None and len(self._attack_rows) > 0:
-            row = self._attack_rows.iloc[[self._attack_index % len(self._attack_rows)]]
-            self._attack_index += 1
-        elif self._normal_rows is not None and len(self._normal_rows) > 0:
-            row = self._normal_rows.iloc[[self._normal_index % len(self._normal_rows)]]
-            self._normal_index += 1
+        if use_non_zero:
+            if self._severity_cycle:
+                sev = self._severity_cycle[self._severity_index % len(self._severity_cycle)]
+                sev_rows = self._rows_by_severity[sev]
+                sev_idx = self._rows_by_severity_index[sev]
+                row = sev_rows.iloc[[sev_idx % len(sev_rows)]]
+                self._rows_by_severity_index[sev] = sev_idx + 1
+                self._severity_index += 1
+            else:
+                row = self._rows_non_zero.iloc[[self._non_zero_index % len(self._rows_non_zero)]]
+                self._non_zero_index += 1
+        elif self._rows_zero is not None and len(self._rows_zero) > 0:
+            row = self._rows_zero.iloc[[self._zero_index % len(self._rows_zero)]]
+            self._zero_index += 1
         else:
-            row = TELEMETRY_DATA.iloc[[self._csv_index % len(TELEMETRY_DATA)]]
-
+            row = self._rows.iloc[[self._csv_index % len(self._rows)]]
         self._csv_index += 1
 
         date = row.drop(columns=[c for c in COLOANE_INUTILE if c in row.columns], errors='ignore')
@@ -259,6 +290,26 @@ class GridAI:
 
         return scored[0].get("label") if scored else None
 
+    def _normalize_station_id(self, station_id, nodes: list) -> str | None:
+        if station_id is None:
+            return None
+
+        raw = str(station_id).strip().upper()
+        if raw in ("", "0", "NAN", "NONE"):
+            return None
+
+        labels = {str(n.get("label", "")).strip().upper() for n in nodes if n.get("label")}
+        if raw in labels:
+            return raw
+
+        if raw.isdigit():
+            station_num = int(raw)
+            for n in nodes:
+                if int(n.get("id", -1)) == station_num and n.get("label"):
+                    return str(n["label"]).strip().upper()
+
+        return None
+
     def _build_cut_edges(self, target_node: str | None, action: str | None) -> list[str]:
         if not target_node or action != "isolate_scada":
             return []
@@ -277,7 +328,8 @@ class GridAI:
         prob_cyber, deficit_csv, csv_station_id, csv_severity = self._predict_anomaly(snapshot)
         deficit = max(deficit_snapshot, deficit_csv)
 
-        nod_suspect = csv_station_id or self._choose_suspect_node(nodes, prob_cyber)
+        csv_node = self._normalize_station_id(csv_station_id, nodes)
+        nod_suspect = csv_node or self._choose_suspect_node(nodes, prob_cyber)
 
         evaluare = self._optimizer.evalueaza_stare_retea(
             deficit_mw=deficit,
@@ -289,7 +341,7 @@ class GridAI:
         recomandare = evaluare["recomandare_ai"]
         tip_atac = evaluare.get("tip_atac", "Anomalie")
 
-        if prob_cyber >= 0.60 or csv_severity >= 3 or nivel >= 4 or anomaly == "fdia":
+        if nivel >= 4 or anomaly == "fdia":
             target_node = nod_suspect
             cut_edges = self._build_cut_edges(target_node, "isolate_scada")
 
@@ -299,12 +351,12 @@ class GridAI:
                 action="isolate_scada",
                 action_label=f"IZOLEAZA {target_node}" if target_node else "IZOLEAZA SCADA",
                 confidence=min(max(prob_cyber, 0.70), 0.99),
-                severity_level=max(nivel, 4),
+                severity_level=max(nivel, csv_severity, 4),
                 target_node=target_node,
                 cut_edges=cut_edges,
             )
 
-        if deficit > self.DEFICIT_CRITICAL or csv_severity >= 3 or nivel >= 3 or anomaly == "physical":
+        if nivel >= 3 or anomaly == "physical":
             offline = [n for n in nodes if not n.get("online", True)]
             offline_labels = ", ".join(n["label"] for n in offline if n.get("label")) or "necunoscut"
 
@@ -314,7 +366,7 @@ class GridAI:
                 action="load_shedding",
                 action_label="EXECUTA LOAD SHEDDING",
                 confidence=min(max(deficit / 1500, 0.60), 0.99),
-                severity_level=max(nivel, 3),
+                severity_level=max(nivel, csv_severity, 3),
                 target_node=nod_suspect,
                 cut_edges=[],
             )
@@ -331,14 +383,15 @@ class GridAI:
                 cut_edges=[],
             )
 
-        if nivel >= 1:
+        nivel_low = max(nivel, min(csv_severity, 2))
+        if nivel_low >= 1:
             return AIDecision(
                 status="alert",
                 recommendation=recomandare,
                 action=None,
                 action_label=None,
                 confidence=0.60,
-                severity_level=nivel,
+                severity_level=nivel_low,
                 target_node=nod_suspect,
                 cut_edges=[],
             )
