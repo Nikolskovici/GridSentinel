@@ -26,3 +26,10 @@ Thumbs.db
 # --- Fișiere temporare ---
 *.log
 *.tmp
+node_modules
+node_modules
+.venv/
+Integrare_AI/.venv/
+__pycache__/
+*.pyc
+node_modules/
