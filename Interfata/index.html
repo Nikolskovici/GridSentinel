@@ -202,6 +202,8 @@ let nodeAnalysis = {};
 let liveCutEdges = [];
 let aiCurrentStatus = 'normal';
 let aiTargetNode = null;
+let lastAiLogKey = null;
+let lastAiLogTs = 0;
 
 const SEVERITY_COLORS = {
   0: '#3fb950',
@@ -453,13 +455,23 @@ function updateAIPanel(ai, g) {
       ? (ai.confidence * 100).toFixed(0) + '% conf.'
       : '';
 
+  const severity = Number(ai.severity_level ?? 0);
+  if (severity >= 1) {
+    const logMsg = `[NIVEL ${severity}] ` + (ai.recommendation || g.alert_message || 'Alerta detectata.');
+    const logType = severity >= 4 ? 'danger' : severity >= 2 ? 'warning' : 'info';
+    const logKey = [severity, ai.status || '', ai.target_node || '', ai.action || '', ai.recommendation || ''].join('|');
+    const now = Date.now();
+
+    if (logKey !== lastAiLogKey || (now - lastAiLogTs) > 15000) {
+      addAlert(logMsg, logType);
+      lastAiLogKey = logKey;
+      lastAiLogTs = now;
+    }
+  }
+
   if (ai.action && !pendingAction) {
     pendingAction = ai.action;
     renderAIActions(ai);
-
-    if (g.alert_message) {
-      addAlert(g.alert_message, g.anomaly_type === 'fdia' ? 'danger' : 'warning');
-    }
   }
 
   if (!ai.action) {
