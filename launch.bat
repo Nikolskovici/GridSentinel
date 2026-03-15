@@ -1,48 +1,38 @@
 @echo off
-REM GridSentinel Desktop Application Launcher
+REM GridSentinel Desktop Application Launcher — MODIFICAT
 REM Porneste serverul Python si aplicatia Electron
 
 cd /d "%~dp0"
+echo Current dir: %cd%
 
 echo.
 echo ===================================
-echo GridSentinel Launcher
+echo GridSentinel Launcher - REPAIR MODE
 echo ===================================
 echo.
 
-REM Verific daca Python este disponibil
-where python >nul 2>nul
-if %ERRORLEVEL% NEQ 0 (
-    echo Eroare: Python nu gasit in PATH
-    echo Incerc sa gasesc Python 3.14...
-    set "PYTHON_EXE=C:\Users\lakv6\AppData\Local\Programs\Python\Python314\python.exe"
-    if not exist !PYTHON_EXE! (
-        echo Eroare: Python 3.14 nu gasit
-        pause
-        exit /b 1
-    )
-) else (
-    for /f %%i in ('where python') do set "PYTHON_EXE=%%i"
-)
-
-echo [*] Python: %PYTHON_EXE%
-
-REM Verific daca serverul ruleaza deja
-echo [*] Verific daca serverul e deja pornit...
-netstat -ano | findstr :8000 >nul
-if %ERRORLEVEL% EQU 0 (
-    echo [+] Serverul ruleaza deja pe port 8000
-) else (
-    echo [*] Pornesc serverul Python...
-    start "GridSentinel Server" cmd /K "cd /d "%~dp0Interfata" && %PYTHON_EXE% -m uvicorn main:app --port 8000"
-    timeout /t 3 /nobreak
-    echo [+] Serverul pornit in background
-)
+REM Pasul 1: Curatare procese blocate (evita eroarea de Port 8000 ocupat)
+echo [] Inchid procese vechi pentru a evita conflictele...
+taskkill /F /IM python.exe /T >nul 2>&1
+taskkill /F /IM node.exe /T >nul 2>&1
 
 echo.
-echo [*] Pornesc aplicatia Electron...
+REM Pasul 2: Pornire Server
+echo [] Pornesc serverul Python (Inima GridSentinel)...
+REM Folosim "python main.py" pentru ca am pus uvicorn.run inauntru
+start "GridSentinel Server" cmd /K "python main.py"
+
+echo.
+REM Pasul 3: Asteptare (Marim la 6 secunde pentru siguranta)
+echo [] Astept 6 secunde sa se incarce modulele AI si Serverul...
+timeout /t 6 /nobreak
+
+echo.
+REM Pasul 4: Pornire Electron
+echo [] Pornesc aplicatia Electron...
+cd /d "%~dp0.."
 call npx electron .
 
 echo.
-echo Aplicatia s-a inchis.
+echo [+] Aplicatia s-a inchis.
 pause

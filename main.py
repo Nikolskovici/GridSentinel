@@ -1,6 +1,8 @@
 import time
-import Interfata.interfata_extensie.data_generator as data_generator
-from Interfata.config import STATIONS, SEVERITY_LEVELS
+import sys
+import os
+import src.data.data_generator as data_generator
+from src.Interfata.config import STATIONS, SEVERITY_LEVELS
 
 # Aici vor aparea importurile colegilor cand sunt gata:
 # import model_ai  <-- Tudor (AI)

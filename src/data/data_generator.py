@@ -4,9 +4,9 @@ import random
 
 # Încercăm să importăm stațiile indiferent de cum e rulat scriptul
 try:
-    from config import STATIONS
+    from src.Interfata.config import STATIONS
 except ImportError:
-    from src.config import STATIONS
+    from Interfata.config import STATIONS
 
 # --- 0. DICȚIONARE DE TRADUCERE (Pentru Tudor/AI) ---
 weather_map = {"Senin": 0, "Noros": 1, "Furtuna": 2, "Tornada": 3, "Inundatie": 4}
@@ -132,6 +132,23 @@ def generate_telemetry_stream(duration=300):
             
     pd.DataFrame(all_rows).to_csv("data/telemetry_stream.csv", index=False)
     print("✅ telemetry_stream.csv actualizat!")
+
+def get_live_data():
+    """Simulează citirea live a datelor (pentru demo)"""
+    # Într-un scenariu real, aici am citi de la senzori sau API-uri
+    # Pentru demo, vom citi rând cu rând din telemetry_stream.csv
+    df = pd.read_csv("data/telemetry_stream.csv")
+    for _, row in df.iterrows():
+        senzori = {
+            "status": row["status"],
+            "weather": row["weather"],
+            "frecventa_hz": row["frecventa_hz"],
+            "tensiune_kv": row["tensiune_kv"],
+            "flux_intrare_mw": row["flux_intrare_mw"],
+            "flux_iesire_mw": row["flux_iesire_mw"]
+        }
+        severitate_reala = row["nivel_severitate"]
+        yield senzori, severitate_reala
 
 if __name__ == "__main__":
     generate_training_file()
