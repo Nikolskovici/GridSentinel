@@ -41,3 +41,7 @@ Proiectul se bazează pe analiza fluxului de putere și a stabilității frecven
 * **Tudor:** Machine Learning Engineer
 * **Iustin:** Logic & Decision Engine
 * **Alex:** UI/UX & Visualization Specialist
+
+---
+
+> **📌 Notă:** Acest proiect a fost dezvoltat într-un regim intensiv pe parcursul unui **hackathon**, având un caracter educațional și de cercetare. Soluția se concentrează pe claritate, interpretabilitate și utilizarea analizei geospațiale aplicate pentru protecția infrastructurilor critice.
